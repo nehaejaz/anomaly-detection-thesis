@@ -4,3 +4,4 @@
 /support_set/
 support_set.tar
 __pycache__/
+*.pt
