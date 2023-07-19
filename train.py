@@ -65,7 +65,7 @@ def main():
     ENC = Encoder().to(device)
     PRED = Predictor().to(device)
 
-    print(STN)
+    # print(STN)
 
     STN_optimizer = optim.SGD(STN.parameters(), lr=args.lr, momentum=args.momentum)
     ENC_optimizer = optim.SGD(ENC.parameters(), lr=args.lr, momentum=args.momentum)
@@ -166,22 +166,40 @@ def train(models, epoch, train_loader, optimizers, log):
         PRED_optimizer.zero_grad()
 
         query_img = query_img.squeeze(0).to(device)
+        """The shape of query_feat is [32, 256, 14, 14] [B,C,H,W]"""
         query_feat = STN(query_img)
+        print("query_feat", query_feat.shape)
+
         support_img = support_img_list.squeeze(0).to(device)
         B,K,C,H,W = support_img.shape
 
         support_img = support_img.view(B * K, C, H, W)
+        """The shape of support_feat is [64, 256, 14, 14] because we ARE DOING B*K images"""
         support_feat = STN(support_img)
+        print("support_feat", support_feat.shape)
+
+        """Because w ehave k-shot images"""
         support_feat = support_feat / K
 
         _, C, H, W = support_feat.shape
         support_feat = support_feat.view(B, K, C, H, W)
+        
         support_feat = torch.sum(support_feat, dim=1)
 
+        """The shape of z1 is [32, 256, 14, 14]"""
         z1 = ENC(query_feat)
+        print("z1", z1.shape)
+        """The shape of z2 is [32, 256, 14, 14]"""
         z2 = ENC(support_feat)
+        print("z2", z2.shape)
+        """The shape of p1 is [32, 256, 14, 14]"""
         p1 = PRED(z1)
+        print("p1", p1.shape)
+        """The shape of p2 is [32, 256, 14, 14]"""
         p2 = PRED(z2)
+        print("p2", p2.shape)
+        exit()
+        
         total_loss = CosLoss(p1,z2, Mean=True)/2 + CosLoss(p2,z1, Mean=True)/2
         total_losses.update(total_loss.item(), query_img.size(0))
 
@@ -229,13 +247,22 @@ def test(models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
         rotate90_img = rot90_img(support_img, angle)
         augment_support_img = torch.cat([augment_support_img, rotate90_img], dim=0)
     augment_support_img = augment_support_img[torch.randperm(augment_support_img.size(0))]
+    """The shape of augment_support_img which is the input tensor is [44, 3, 224, 224]""" 
 
     # torch version
     with torch.no_grad():
         support_feat = STN(augment_support_img.to(device))
+    """The shape of support_feat is [44, 256, 14, 14]""" 
+    
     support_feat = torch.mean(support_feat, dim=0, keepdim=True)
+
+    """The shape of layer1 is [44, 64, 56, 56] """
     train_outputs['layer1'].append(STN.stn1_output)
+    
+    """The shape of layer2 is [44, 128, 28, 28] """
     train_outputs['layer2'].append(STN.stn2_output)
+    
+    """The shape of layer3 is [44, 256, 14, 14] """
     train_outputs['layer3'].append(STN.stn3_output)
 
     for k, v in train_outputs.items():
@@ -245,15 +272,22 @@ def test(models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     embedding_vectors = train_outputs['layer1']
     for layer_name in ['layer2', 'layer3']:
         embedding_vectors = embedding_concat(embedding_vectors, train_outputs[layer_name], True)
+    """The shape of embedding_vectors is [44, 448, 56, 56]""" 
 
     # calculate multivariate Gaussian distribution
     B, C, H, W = embedding_vectors.size()
     embedding_vectors = embedding_vectors.view(B, C, H * W)
+    """The shape of mean is [448, 56x56 (3136)]""" 
     mean = torch.mean(embedding_vectors, dim=0)
+
     cov = torch.zeros(C, C, H * W).to(device)
     I = torch.eye(C).to(device)
     for i in range(H * W):
         cov[:, :, i] = torch.cov(embedding_vectors[:, :, i].T) + 0.01 * I
+    """The shape of cov is [448, 448, 56x56 (3136)]""" 
+
+
+
     train_outputs = [mean, cov]
 
     # torch version
@@ -269,6 +303,8 @@ def test(models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
 
         # model prediction
         query_feat = STN(query_img.to(device))
+        print("query_feat",query_feat.shape)
+
         z1 = ENC(query_feat)
         z2 = ENC(support_feat)
         p1 = PRED(z1)
@@ -311,7 +347,7 @@ def test(models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     # apply gaussian smoothing on the score map
     for i in range(score_map.shape[0]):
         score_map[i] = gaussian_filter(score_map[i], sigma=4)
-
+    
     return score_map, query_imgs, gt_list, mask_list
 
 def adjust_learning_rate(optimizers, init_lrs, epoch, args):
