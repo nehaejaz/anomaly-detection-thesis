@@ -158,7 +158,7 @@ class FSAD_Dataset_train(Dataset):
 
 class FSAD_Dataset_test(Dataset):
     def __init__(self,
-                 dataset_path='../data/mvtec_anomaly_detection',
+                 dataset_path='../mvtec_loco_anomaly_detection',
                  class_name='bottle',
                  is_train=True,
                  resize=256,
@@ -184,8 +184,9 @@ class FSAD_Dataset_test(Dataset):
 
     def __getitem__(self, idx):
         query_one, support_one, mask_one = self.query_dir[idx], self.support_dir[idx], self.query_mask[idx]
-        query_img = Image.open(query_one).convert('RGB')
-        query_img = self.transform_x(query_img)
+        if not ("/.DS_Store" in query_one):
+            query_img = Image.open(query_one).convert('RGB')
+            query_img = self.transform_x(query_img)
 
         support_img = []
         for k in range(self.shot):
@@ -214,10 +215,11 @@ class FSAD_Dataset_test(Dataset):
         for img_type in img_types:
             data_img[img_type] = []
             img_type_dir = os.path.join(img_dir, img_type)
-            img_num = sorted(os.listdir(img_type_dir))
-            for img_one in img_num:
-                img_dir_one = os.path.join(img_type_dir, img_one)
-                data_img[img_type].append(img_dir_one)
+            if ".DS_Store" not in os.path.basename(img_type_dir):
+                img_num = sorted(os.listdir(img_type_dir))
+                for img_one in img_num:
+                    img_dir_one = os.path.join(img_type_dir, img_one)
+                    data_img[img_type].append(img_dir_one)
         img_dir_train = os.path.join(self.dataset_path, self.class_name, 'train', 'good')
         img_num = sorted(os.listdir(img_dir_train))
 
@@ -231,14 +233,15 @@ class FSAD_Dataset_test(Dataset):
         for img_type in data_img.keys():
             for image_dir_one in data_img[img_type]:
                 support_dir_one = []
-                query_dir.append(image_dir_one)
-                query_mask_dir = image_dir_one.replace('test', 'ground_truth')
-                query_mask_dir = query_mask_dir[:-4] + '_mask.png'
-                query_mask.append(query_mask_dir)
-                for k in range(self.shot):
-                    random_choose = random.randint(0, (len(data_train) - 1))
-                    support_dir_one.append(data_train[random_choose])
-                support_dir.append(support_dir_one)
+                if not ("/.DS_Store" in image_dir_one):
+                    query_dir.append(image_dir_one)
+                    query_mask_dir = image_dir_one.replace('test', 'ground_truth')
+                    query_mask_dir = query_mask_dir[:-4] + '_mask.png'
+                    query_mask.append(query_mask_dir)
+                    for k in range(self.shot):
+                        random_choose = random.randint(0, (len(data_train) - 1))
+                        support_dir_one.append(data_train[random_choose])
+                    support_dir.append(support_dir_one)
 
         assert len(query_dir) == len(support_dir) == len(
             query_mask), 'number of query_dir and support_dir should be same'

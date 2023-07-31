@@ -277,8 +277,10 @@ def test(models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     # calculate multivariate Gaussian distribution
     B, C, H, W = embedding_vectors.size()
     embedding_vectors = embedding_vectors.view(B, C, H * W)
-    """The shape of mean is [448, 56x56 (3136)]""" 
+    """The shape of embedding_vectors is [44, 448, 56, 56]""" 
+
     mean = torch.mean(embedding_vectors, dim=0)
+    """The shape of mean is [448, 56x56 (3136)]""" 
 
     cov = torch.zeros(C, C, H * W).to(device)
     I = torch.eye(C).to(device)
@@ -326,6 +328,7 @@ def test(models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     embedding_vectors = test_outputs['layer1']
     for layer_name in ['layer2', 'layer3']:
         embedding_vectors = embedding_concat(embedding_vectors, test_outputs[layer_name], True)
+    """The shape of embedding_vectors is [83, 448, 56, 56]""" 
 
     # calculate distance matrix
     B, C, H, W = embedding_vectors.size()
@@ -348,6 +351,8 @@ def test(models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     for i in range(score_map.shape[0]):
         score_map[i] = gaussian_filter(score_map[i], sigma=4)
     
+    print("score_map",score_map.shape)
+    exit()
     return score_map, query_imgs, gt_list, mask_list
 
 def adjust_learning_rate(optimizers, init_lrs, epoch, args):

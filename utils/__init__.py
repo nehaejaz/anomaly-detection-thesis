@@ -40,3 +40,11 @@ def guess(x):
         _style_inline
         + "<h4>Answer is: <span class='einops-answer'>{x}</span> (hover to see)</h4>".format(x=tuple(x)),
         raw=True)
+"""Algorithms for decomposition and dimensionality reduction."""
+
+# Copyright (C) 2022 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+from .random_proj import SparseRandomProjection
+
+__all__ = ["SparseRandomProjection"]
