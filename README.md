@@ -41,3 +41,21 @@ trainer:
   lr: 0.0001
   momentum: 0.9
   stn_mode: rotation_scale
+```
+
+### 4. Training
+Run the following command to train the model:
+
+```
+python train.py --config path/to/config.yaml
+
+```
+
+### 4. Testing
+Run the following command to test the model:
+
+
+```
+python test.py --config path/to/config.yaml --CKPT_name path/to/model_checkpoint.pth
+
+```
