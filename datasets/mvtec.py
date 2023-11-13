@@ -7,11 +7,6 @@ import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
 
-CLASS_NAMES = [
-    'bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut', 'leather', 'metal_nut', 'pill', 'screw', 'tile',
-    'toothbrush', 'transistor', 'wood', 'zipper'
-]
-
 class FSAD_Dataset_train(Dataset):
     def __init__(self,
                  dataset_path='../data/mvtec_anomaly_detection',
@@ -19,9 +14,23 @@ class FSAD_Dataset_train(Dataset):
                  is_train=True,
                  resize=256,
                  shot=2,
-                 batch=32
+                 batch=32,
+                 data_type="mvtec"
                  ):
-        assert class_name in CLASS_NAMES, 'class_name: {}, should be in {}'.format(class_name, CLASS_NAMES)
+        
+        # Set CLASS_NAMES based on data_type
+        if data_type == "mvtec":
+            self.CLASS_NAMES = [
+                'bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut', 'leather', 'metal_nut', 'pill', 'screw',
+                'tile', 'toothbrush', 'transistor', 'wood', 'zipper'
+            ]
+        elif data_type == "mpdd":
+            self.CLASS_NAMES = [
+                'bracket_black', 'bracket_brown', 'bracket_white', 'connector', 'metal_plate', 'tubes'
+            ]
+        else:
+            raise ValueError("This datatype is not supported by us.")
+        assert class_name in self.CLASS_NAMES, 'class_name: {}, should be in {}'.format(class_name, self.CLASS_NAMES)
         self.dataset_path = dataset_path
         self.class_name = class_name
         self.is_train = is_train
@@ -80,7 +89,7 @@ class FSAD_Dataset_train(Dataset):
 
         data_img = {}
         # data_img includes all image pathes, key: class_name like wood, zipper. value: each image path.
-        for class_name_one in CLASS_NAMES:
+        for class_name_one in self.CLASS_NAMES:
             if class_name_one != self.class_name:
                 data_img[class_name_one] = []
                 img_dir = os.path.join(self.dataset_path, class_name_one, phase, 'good')
@@ -119,7 +128,7 @@ class FSAD_Dataset_train(Dataset):
         phase = 'train' if self.is_train else 'test'
 
         data_img = {}
-        for class_name_one in CLASS_NAMES:
+        for class_name_one in self.CLASS_NAMES:
             if class_name_one != self.class_name:
                 data_img[class_name_one] = []
                 img_dir = os.path.join(self.dataset_path, class_name_one, phase, 'good')
@@ -162,9 +171,23 @@ class FSAD_Dataset_test(Dataset):
                  class_name='bottle',
                  is_train=True,
                  resize=256,
-                 shot=2
+                 shot=2,
+                 data_type="mvtec"
                  ):
-        assert class_name in CLASS_NAMES, 'class_name: {}, should be in {}'.format(class_name, CLASS_NAMES)
+        
+        # Set CLASS_NAMES based on data_type
+        if data_type == "mvtec":
+            self.CLASS_NAMES = [
+                'bottle', 'cable', 'capsule', 'carpet', 'grid', 'hazelnut', 'leather', 'metal_nut', 'pill', 'screw',
+                'tile', 'toothbrush', 'transistor', 'wood', 'zipper'
+            ]
+        elif data_type == "mpdd":
+            self.CLASS_NAMES = [
+                'bracket_black', 'bracket_brown', 'bracket_white', 'connector', 'metal_plate', 'tubes'
+            ]
+        else:
+            raise ValueError("This datatype is not supported by us.")
+        assert class_name in self.CLASS_NAMES, 'class_name: {}, should be in {}'.format(class_name, self.CLASS_NAMES)
         self.dataset_path = dataset_path
         self.class_name = class_name
         self.is_train = is_train

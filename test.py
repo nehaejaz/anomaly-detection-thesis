@@ -1,6 +1,6 @@
 import os
 import random
-import argparse
+from argparse import ArgumentParser, Namespace
 import time
 import torch
 import numpy as np
@@ -12,9 +12,7 @@ from utils.utils import time_file_str, time_string, convert_secs2time, AverageMe
 from models.siamese import Encoder, Predictor
 from models.stn import stn_net
 from losses.norm_loss import CosLoss
-from utils.funcs import embedding_concat, mahalanobis_torch, rot_img, translation_img, hflip_img, rot90_img, grey_img
-from utils.KCenterGreedy import KCenterGreedy
-from utils.AnomalyMapGenerator import AnomalyMapGenerator
+from utils.funcs import embedding_concat, mahalanobis_torch, apply_augmentations, nearest_neighbors, reshape_embedding, subsample_embedding, compute_anomaly_score
 from sklearn.metrics import roc_auc_score
 from scipy.ndimage import gaussian_filter
 from collections import OrderedDict
@@ -23,43 +21,50 @@ import csv
 import torchvision.transforms as transforms
 from PIL import Image
 import matplotlib.pyplot as plt
+from config import get_configurable_parameters
+from utils.AnomalyMapGenerator import AnomalyMapGenerator
 
 warnings.filterwarnings("ignore")
 use_cuda = torch.cuda.is_available()
 device = torch.device('cuda' if use_cuda else 'cpu')
-memory_bank = torch.Tensor()
+
+def get_parser() -> ArgumentParser:
+    """Get parser.
+
+    Returns:
+        ArgumentParser: The parser object.
+    """
+    parser = ArgumentParser(description='Registration based Few-Shot Anomaly Detection')
+    parser.add_argument("--config", type=str, required=False, help="Path to a model config file")
+    parser.add_argument("--CKPT_name", type=str, required=False, help="Path to a model checkpoint")
+
+    return parser
 
 def main():
-    parser = argparse.ArgumentParser(description='RegAD on MVtec')
-    parser.add_argument('--obj', type=str, default='hazelnut')
-    parser.add_argument('--data_type', type=str, default='mvtec')
-    parser.add_argument('--data_path', type=str, default='./mvtec_loco_anomaly_detection/')
-    parser.add_argument('--epochs', type=int, default=50, help='maximum training epochs')
-    parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--img_size', type=int, default=224)
-    parser.add_argument('--lr', type=float, default=0.01, help='learning rate in SGD')
-    parser.add_argument('--momentum', type=float, default=0.9, help='momentum of SGD')
-    parser.add_argument('--seed', type=int, default=668, help='manual seed')
-    parser.add_argument('--shot', type=int, default=2, help='shot count')
-    parser.add_argument('--inferences', type=int, default=10, help='number of rounds per inference')
-    parser.add_argument('--stn_mode', type=str, default='rotation_scale', help='[affine, translation, rotation, scale, shear, rotation_scale, translation_scale, rotation_translation, rotation_translation_scale]')
-    args = parser.parse_args()
+
+    args = get_parser().parse_args()
+
+    """Read the arguments from Config File"""
+    config = get_configurable_parameters(config_path=args.config)
 
     args.input_channel = 3
-    if args.seed is None:
-        args.seed = random.randint(1, 10000)
-        random.seed(args.seed)
-        torch.manual_seed(args.seed)
+    
+    if config.project.get("seed") is None:
+        config.project.seed = random.randint(1, 10000)
+        random.seed(config.project.seed)
+        torch.manual_seed(config.project.seed)
     if use_cuda:
-        torch.cuda.manual_seed_all(args.seed)
+        torch.cuda.manual_seed_all(config.project.seed)
     args.prefix = time_file_str()
-
-    STN = stn_net(args).to(device)
+    
+    STN = stn_net(config).to(device)
     ENC = Encoder().to(device)
     PRED = Predictor().to(device)
     
     # load models
-    CKPT_name = f'./save_checkpoints/{args.shot}/{args.obj}/{args.obj}_{args.shot}_rotation_scale_model.pt'
+    """TODO: Get path from config file"""
+    # CKPT_name = f'./save_checkpoints/{args.shot}/{args.obj}/{args.obj}_{args.shot}_rotation_scale_model.pt'
+    CKPT_name = args.CKPT_name
     model_CKPT = torch.load(CKPT_name)
     STN.load_state_dict(model_CKPT['STN'])
     ENC.load_state_dict(model_CKPT['ENC'])
@@ -68,19 +73,20 @@ def main():
 
     print('Loading Datasets')
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
-    args.obj = "breakfast_box"
-    test_dataset = FSAD_Dataset_test(args.data_path, class_name=args.obj, is_train=False, resize=args.img_size, shot=args.shot)
+
+    test_dataset = FSAD_Dataset_test(config.dataset.data_path, class_name=config.dataset.obj, is_train=False, resize=config.dataset.img_size, shot=config.dataset.shot, data_type=config.dataset.data_type)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, **kwargs)
 
     print('Loading Fixed Support Set')
-    # fixed_fewshot_list = torch.load(f'./support_set/{args.obj}/{args.shot}_{args.inferences}.pt')
+
+    fixed_fewshot_list = torch.load(config.dataset.supp_set)
 
     print('Start Testing:')
     image_auc_list = []
     pixel_auc_list = []
-    for inference_round in range(args.inferences):
+    for inference_round in range(config.trainer.inferences):
         print('Round {}:'.format(inference_round))
-        scores_list, test_imgs, gt_list, gt_mask_list = test(args, models, inference_round, test_loader, **kwargs)
+        scores_list, test_imgs, gt_list, gt_mask_list = test(config, models, inference_round, fixed_fewshot_list, test_loader, **kwargs)
         scores = np.asarray(scores_list)
         
         # Normalization
@@ -115,7 +121,7 @@ def main():
     print('Pixel-level AUC:', mean_pixel_auc)
 
 
-def test(args, models, cur_epoch, test_loader, **kwargs):
+def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     STN = models[0]
     ENC = models[1]
     PRED = models[2]
@@ -123,83 +129,21 @@ def test(args, models, cur_epoch, test_loader, **kwargs):
     STN.eval()
     ENC.eval()
     PRED.eval()
+    
+    memory_bank = torch.Tensor()
+
 
     train_outputs = OrderedDict([('layer1', []), ('layer2', []), ('layer3', [])])
     test_outputs = OrderedDict([('layer1', []), ('layer2', []), ('layer3', [])])
-    support_imgs=[]
-    for (query_img, support_img, mask, y) in tqdm(test_loader):
-        #Getting only 10 support sets otherwise we have 83 suport sets 1 set for each test image
-        for i in range(10):
-            numpy_array = np.stack([t.numpy() for t in support_img])
-            numpy_array = numpy_array.squeeze(1)
-            support_imgs.append(numpy_array)
-        break;
-    
-    new_size = [224, 224]
 
     #The shape support_img should be [2,3,224,224] [k, C, H, W]
-    support_img = support_imgs[cur_epoch]
-    # support_img = fixed_fewshot_list[cur_epoch]
-    support_img = torch.from_numpy(support_img)
-    print("support_img", support_img.shape)
-    
-    single_img = support_img[0]
-    
-    print(single_img.shape)
-    # Transpose the tensor to (224, 224, 3) for visualization
-    img = single_img.permute(1, 2, 0)
-
-    # Convert the tensor to numpy array
-    img_np = img.detach().numpy()
-
-    # Display the image
-    # plt.imshow(img_np)
-    # plt.imsave('new.png', img_np)
-    
-    height = support_img.shape[2]
-    width = support_img.shape[3]
-
-    #change heught and width to 224x224 if not already
-    if height and width != 224:
-        support_img = F.interpolate(support_img, size=new_size, mode='bilinear', align_corners=False)     #reshape image to 224x224
-
-    
-    # for img in support_img:
-    #     print(img.shape)
-    #     # Normalize the image tensor to [0, 1] if it isn't already (skip this step if not necessary)
-    #     img = (img - img.min()) / (img.max() - img.min())
-
-    #     # Transpose the tensor to (224, 224, 3) for visualization
-    #     img = img.permute(1, 2, 0)
-
-    #     # Convert the tensor to numpy array
-    #     img_np = img.detach().numpy()
-
-    #     # Display the image
-    #     plt.imshow(img_np)
-    #     plt.imsave('resized_image.png', img_np)
+    support_img = fixed_fewshot_list[cur_epoch]
 
     augment_support_img = support_img
-    # rotate img with small angle
-    for angle in [-np.pi/4, -3 * np.pi/16, -np.pi/8, -np.pi/16, np.pi/16, np.pi/8, 3 * np.pi/16, np.pi/4]:
-        rotate_img = rot_img(support_img, angle)
-        augment_support_img = torch.cat([augment_support_img, rotate_img], dim=0)
-    # translate img
-    for a,b in [(0.2,0.2), (-0.2,0.2), (-0.2,-0.2), (0.2,-0.2), (0.1,0.1), (-0.1,0.1), (-0.1,-0.1), (0.1,-0.1)]:
-        trans_img = translation_img(support_img, a, b)
-        augment_support_img = torch.cat([augment_support_img, trans_img], dim=0)
-    # hflip img
-    flipped_img = hflip_img(support_img)
-    augment_support_img = torch.cat([augment_support_img, flipped_img], dim=0)
-    # rgb to grey img
-    greyed_img = grey_img(support_img)
-    augment_support_img = torch.cat([augment_support_img, greyed_img], dim=0)
-    # rotate img in 90 degree
-    for angle in [1,2,3]:
-        rotate90_img = rot90_img(support_img, angle)
-        augment_support_img = torch.cat([augment_support_img, rotate90_img], dim=0)
-    augment_support_img = augment_support_img[torch.randperm(augment_support_img.size(0))]
-    print("augment_support_img",augment_support_img.shape)
+    
+    #Apply Augmentations
+    augment_support_img = apply_augmentations(augment_support_img,support_img)
+   
     # torch version
     with torch.no_grad():
         support_feat = STN(augment_support_img.to(device))
@@ -215,31 +159,16 @@ def test(args, models, cur_epoch, test_loader, **kwargs):
     embedding_vectors = train_outputs['layer1']
     for layer_name in ['layer2', 'layer3']:
         embedding_vectors = embedding_concat(embedding_vectors, train_outputs[layer_name], True)
+    
     """The shape of embedding_vectors is [44, 448, 56, 56]""" 
     print("embedding_vectors",embedding_vectors.shape)
-
-    # for e in embedding_vectors:
-    #     print("e", e.shape)
-    #Apply reshaping on supp embeddings 
+ 
     embedding_vectors = reshape_embedding(embedding_vectors)
     print("embedding_vectors reshaped",embedding_vectors.shape)
 
-    global memory_bank
-
     #Applying core-set subsampling to get the embedding
-    memory_bank = subsample_embedding(embedding_vectors, coreset_sampling_ratio= 0.05)
+    memory_bank = subsample_embedding(embedding_vectors, coreset_sampling_ratio= config.model.coreset_sampling_ratio)
     print("memory_bank",memory_bank.shape)
-
-    # calculate multivariate Gaussian distribution
-    # B, C, H, W = embedding_vectors.size()
-    # embedding_vectors = embedding_vectors.view(B, C, H * W)
-
-    # mean = torch.mean(embedding_vectors, dim=0)
-    # cov = torch.zeros(C, C, H * W).to(device)
-    # I = torch.eye(C).to(device)
-    # for i in range(H * W):
-    #     cov[:, :, i] = torch.cov(embedding_vectors[:, :, i].T) + 0.01 * I
-    # train_outputs = [mean, cov]
 
     # torch version
     query_imgs = []
@@ -251,13 +180,6 @@ def test(args, models, cur_epoch, test_loader, **kwargs):
         query_imgs.extend(query_img.cpu().detach().numpy())
         gt_list.extend(y.cpu().detach().numpy())
         mask_list.extend(mask.cpu().detach().numpy())
-        height = query_img.shape[2]
-        width = query_img.shape[3]
-
-        #change height and width to 224x224 if not already
-        if height and width != 224:
-            query_img = F.interpolate(query_img, size=new_size, mode='bilinear', align_corners=False)     #reshape image to 224x224
-        print("query_img",query_img.shape)
         
         # model prediction
         query_feat = STN(query_img.to(device))
@@ -290,9 +212,7 @@ def test(args, models, cur_epoch, test_loader, **kwargs):
     print(embedding_vectors.shape)
 
     #apply nearest neighbor search on query embeddings 
-    patch_scores, locations = nearest_neighbors(embedding=embedding_vectors, n_neighbors=1)
-    print("patch_scores", patch_scores.shape)
-    print("locations", locations.shape)
+    patch_scores, locations = nearest_neighbors(embedding=embedding_vectors, n_neighbors=config.model.num_neighbors, memory_bank=memory_bank)
     
     # reshape to batch dimension
     """The shape of patch_scores and locations is [83, 260288]"""
@@ -302,7 +222,7 @@ def test(args, models, cur_epoch, test_loader, **kwargs):
     print("A-locations", locations.shape)
     
     #compute anomaly score
-    anomaly_score = compute_anomaly_score(patch_scores, locations, embedding_vectors)
+    anomaly_score = compute_anomaly_score(patch_scores, locations, embedding_vectors, memory_bank)
     print("anomaly_score", anomaly_score.shape)
 
     #reshape to w, h
@@ -310,72 +230,12 @@ def test(args, models, cur_epoch, test_loader, **kwargs):
     """The shape of patch_scores is [83, 1,  56, 56]"""
     
     #define the input size of the image
-    input_size = [224,224]
-    anomaly_map_generator = AnomalyMapGenerator(input_size=input_size)
+    anomaly_map_generator = AnomalyMapGenerator(input_size=config.dataset.img_size)
     anomaly_map = anomaly_map_generator(patch_scores)
     """The shape of anomaly_map is [83, 1,  24, 24]"""
-
-    # Select the first map
-    # first_map = anomaly_map[0, 0, :, :]
     
     #Put it on CPU and convert to numpy
     score_map = anomaly_map.cpu().numpy()
-
-
-    # Plot it using Matplotlib
-    # plt.imshow(score_map, cmap='gray')
-    # plt.colorbar()
-    # plt.savefig('datasets/anomaly_map.png')
-    # plt.close()
-    # exit()
-      
-    
-    # calculate distance matrix
-    # B, C, H, W = embedding_vectors.size()
-    # embedding_vectors = embedding_vectors.view(B, C, H * W)
-    # dist_list = []
-
-
-    # for i in range(H * W):
-    #     mean = train_outputs[0][:, i]
-    #     conv_inv = torch.linalg.inv(train_outputs[1][:, :, i])
-    #     dist = [mahalanobis_torch(sample[:, i], mean, conv_inv) for sample in embedding_vectors]
-    #     dist_list.append(dist)
-        
-    # list_tensor = []
-    # for dis in dist_list:
-    #     # print(type(dis))
-    #     for d in dis:
-    #         d = d.cpu()
-    #         list_tensor.append(d.numpy())
-
-    # array_list = stacked_tensor.numpy()
-    # list_tensor = [array.reshape(1, -1).tolist() for array in list_tensor]
-
-    # # # Define the CSV file path
-    # csv_file = 'distances.csv'
-
-    # # # Write the data to the CSV file
-    # with open(csv_file, 'w', newline='') as file:
-    #     writer = csv.writer(file)
-    #     writer.writerows(list_tensor)
-
-    # print("CSV file created successfully.")
-
-    """shape of dist_list is (83,56,56)"""
-    # dist_list = torch.tensor(dist_list).transpose(1, 0).reshape(B, H, W)
-    # print("dist_list",dist_list.shape)
-
-    # upsample
-    """shape of score_map is (83,224,224)"""
-    # score_map = F.interpolate(dist_list.unsqueeze(1), size=query_img.size(2), mode='bilinear',
-    #                           align_corners=False).squeeze().numpy()
-  
-    # print("score_map",score_map.shape)
-
-    # apply gaussian smoothing on the score map
-    # for i in range(score_map.shape[0]):
-    #     score_map[i] = gaussian_filter(score_map[i], sigma=4)
         
     """To Generate the Heat Maps. Basically the score_map
     is the score of the patchesvwhere the anomalies are present."""   
@@ -397,124 +257,6 @@ def test(args, models, cur_epoch, test_loader, **kwargs):
 
     """The shape of score_map is (83, 224, 224)"""
     return score_map, query_imgs, gt_list, mask_list
-
-def nearest_neighbors(embedding, n_neighbors):
-    """Nearest Neighbours using brute force method and euclidean norm.
-
-    Args:
-        embedding (Tensor): Features to compare the distance with the memory bank.
-        n_neighbors (int): Number of neighbors to look at
-
-    Returns:
-        Tensor: Patch scores.
-        Tensor: Locations of the nearest neighbor(s).
-    """
-    global memory_bank
-    
-    # embedding_size = embedding.shape[0]
-    # memory_bank_size = memory_bank.shape[0]
-
-    # embedding_chunk_size = 100  # Adjust this value based on your GPU memory
-    # memory_bank_chunk_size = 100  # Adjust this value based on your GPU memory
-
-    # distances = []
-
-    # for i in range(0, embedding_size, embedding_chunk_size):
-    #     embedding_chunk = embedding[i:i + embedding_chunk_size, :]
-    #     for j in range(0, memory_bank_size, memory_bank_chunk_size):
-    #         memory_bank_chunk = memory_bank[j:j + memory_bank_chunk_size, :]
-    #         distances_chunk = torch.cdist(embedding_chunk, memory_bank_chunk, p=2.0)
-    #         distances.append(distances_chunk)
-    #     print("round=",i)
-        
-    # print("Done")
-
-    # # Concatenate all distance chunks
-    # distances = torch.cat(distances, dim=0)
-    # print("distances=",distances.shape)
-
-
-
-
-
-    distances = torch.cdist(embedding, memory_bank, p=2.0)  # euclidean norm
-    if n_neighbors == 1:
-        # when n_neighbors is 1, speed up computation by using min instead of topk
-        patch_scores, locations = distances.min(1)
-    else:
-        patch_scores, locations = distances.topk(k=n_neighbors, largest=False, dim=1)
-    return patch_scores, locations
-
-def reshape_embedding(embedding):
-        """Reshape Embedding.
-
-        Reshapes Embedding to the following format:
-        [Batch, Embedding, Patch, Patch] to [Batch*Patch*Patch, Embedding]
-
-        Args:
-            embedding (Tensor): Embedding tensor extracted from CNN features.
-
-        Returns:
-            Tensor: Reshaped embedding tensor.
-        """
-        embedding_size = embedding.size(1)
-        embedding = embedding.permute(0, 2, 3, 1).reshape(-1, embedding_size)
-        return embedding
-    
-def subsample_embedding(embedding, coreset_sampling_ratio):
-        """Subsample embedding based on coreset sampling and store to memory.
-
-        Args:
-            embedding (np.ndarray): Embedding tensor from the CNN
-            sampling_ratio (float): Coreset sampling ratio
-        """
-
-        # Coreset Subsampling
-        sampler = KCenterGreedy(embedding=embedding, sampling_ratio=coreset_sampling_ratio)
-        coreset = sampler.sample_coreset()
-        memory_bank = coreset
-        return memory_bank
-    
-def compute_anomaly_score(patch_scores, locations, embedding):
-        """Compute Image-Level Anomaly Score.
-
-        Args:
-            patch_scores (Tensor): Patch-level anomaly scores
-            locations: Memory bank locations of the nearest neighbor for each patch location
-            embedding: The feature embeddings that generated the patch scores
-        Returns:
-            Tensor: Image-level anomaly scores
-        """
-        global memory_bank
-
-        #Set num_neighbors by your self
-        num_neighbors = 9
-        # Don't need to compute weights if num_neighbors is 1
-        if num_neighbors == 1:
-            return patch_scores.amax(1)
-        batch_size, num_patches = patch_scores.shape
-        # 1. Find the patch with the largest distance to it's nearest neighbor in each image
-        max_patches = torch.argmax(patch_scores, dim=1)  # indices of m^test,* in the paper
-        # m^test,* in the paper
-        max_patches_features = embedding.reshape(batch_size, num_patches, -1)[torch.arange(batch_size), max_patches]
-        # 2. Find the distance of the patch to it's nearest neighbor, and the location of the nn in the membank
-        score = patch_scores[torch.arange(batch_size), max_patches]  # s^* in the paper
-        nn_index = locations[torch.arange(batch_size), max_patches]  # indices of m^* in the paper
-        # 3. Find the support samples of the nearest neighbor in the membank
-        nn_sample = memory_bank[nn_index, :]  # m^* in the paper
-        # indices of N_b(m^*) in the paper
-        print("inside compute_anomaly_score")
-        _, support_samples = nearest_neighbors(nn_sample, n_neighbors=num_neighbors)
-        # 4. Find the distance of the patch features to each of the support samples
-        distances = torch.cdist(max_patches_features.unsqueeze(1), memory_bank[support_samples], p=2.0)
-        print("distances",distances.shape)
-
-        # 5. Apply softmax to find the weights
-        weights = (1 - F.softmax(distances.squeeze(1), 1))[..., 0]
-        # 6. Apply the weight factor to the score
-        score = weights * score  # s in the paper
-        print("score",score.shape)
-        return score
     
 if __name__ == '__main__':
     main()

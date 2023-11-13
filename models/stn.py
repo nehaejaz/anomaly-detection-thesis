@@ -46,11 +46,11 @@ def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
 class STNModule(nn.Module):
-    def __init__(self, in_num, block_index, args):
+    def __init__(self, in_num, block_index, config):
         super(STNModule, self).__init__()
 
         self.feat_size = 56 // (4 * block_index)
-        self.stn_mode = args.stn_mode
+        self.stn_mode = config.trainer.stn_mode
         self.stn_n_params = N_PARAMS[self.stn_mode]
 
         self.conv = nn.Sequential(
@@ -203,7 +203,7 @@ class BasicBlock(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, args, block, layers):
+    def __init__(self, config, block, layers):
         super(ResNet, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
@@ -212,13 +212,13 @@ class ResNet(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0], stride=1)
-        self.stn1 = STNModule(64, 1, args)
+        self.stn1 = STNModule(64, 1, config)
 
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.stn2 = STNModule(128, 2, args)
+        self.stn2 = STNModule(128, 2, config)
 
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.stn3 = STNModule(256, 3, args)
+        self.stn3 = STNModule(256, 3, config)
 
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
@@ -274,12 +274,12 @@ class ResNet(nn.Module):
         return out
 
 
-def stn_net(args, pretrained=True, **kwargs):
+def stn_net(config, pretrained=True, **kwargs):
     """Constructs a ResNet-18 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(args, BasicBlock, [2, 2, 2, 2], **kwargs)
+    model = ResNet(config, BasicBlock, [2, 2, 2, 2], **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet18']), strict=False)
     return model

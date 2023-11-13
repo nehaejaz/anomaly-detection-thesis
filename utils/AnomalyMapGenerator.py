@@ -18,7 +18,7 @@ class AnomalyMapGenerator(nn.Module):
 
     def __init__(
         self,
-        input_size: ListConfig | tuple,
+        input_size: int = 224,
         sigma: int = 4,
     ) -> None:
         super().__init__()
@@ -36,7 +36,7 @@ class AnomalyMapGenerator(nn.Module):
         Returns:
             Tensor: Map of the pixel-level anomaly scores
         """
-        anomaly_map = F.interpolate(patch_scores, size=(self.input_size[0], self.input_size[1]))
+        anomaly_map = F.interpolate(patch_scores, size=(self.input_size, self.input_size))
         anomaly_map = self.blur(anomaly_map)
 
         return anomaly_map
