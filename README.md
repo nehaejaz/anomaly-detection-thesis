@@ -10,7 +10,7 @@ This project presents a deep learning-based category-agnostic model capable of d
 - [MPDD Dataset](https://github.com/stepanje/MPDD)
 
 ### 2. Download Support Sets
-- MVTec: [LINK]
+- MVTec: [MVTec Support Set](https://drive.google.com/file/d/1AZcc77cmDfkWA8f8cs-j-CUuFFQ7tPoK/view)
 - MPDD: [LINK]
 
 ### 3. Setup Config File
