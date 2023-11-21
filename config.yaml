@@ -1,12 +1,14 @@
 dataset:
   data_type: mpdd
   data_path: ./MPDD
-  obj: bracket_black
+  obj: tubes
   shot: 2
-  batch_size: 32
+  batch_size: 10
   img_size: 224
   input_channel: 3
-  supp_set: ./mpdd_supp_set/2/b_b_2_1.pt
+  supp_set: ./mpdd_supp_set/2/t_2_1.pt
+  include_maddern_transform: true
+  alpha: 0.48
 
 model:
   coreset_sampling_ratio: 0.05
@@ -14,7 +16,7 @@ model:
 
 project:
   seed: 668
-  save_dir: results/mpdd-bb-2/
+  save_dir: results/mpdd-bbr-MT/
 
 trainer:
   epochs: 50
