@@ -80,7 +80,16 @@ def denorm(x):
     out = (x + 1) / 2
     return out.clamp_(0, 1)
 
-def apply_augmentations(augment_support_img, support_img):
+def maddern_transform(x,alpha):
+    eps= 1e-7
+    B,C,H,W = x.shape
+    maddern = 0.5 + torch.log(x[:,1,:,:]+eps) - alpha * torch.log(x[:,2,:,:]+eps) - (1-alpha)*torch.log(x[:,0,:,:]+eps)
+    x = maddern.view([B, 1, H, W])
+    print("shape",x.shape)
+    maddern_img_3_channels = torch.cat([x]*3, dim=1)
+    return maddern_img_3_channels
+
+def apply_augmentations(config, augment_support_img, support_img):
      # rotate img with small angle
     for angle in [-np.pi/4, -3 * np.pi/16, -np.pi/8, -np.pi/16, np.pi/16, np.pi/8, 3 * np.pi/16, np.pi/4]:
         rotate_img = rot_img(support_img, angle)
@@ -105,6 +114,10 @@ def apply_augmentations(augment_support_img, support_img):
         augment_support_img = torch.cat([augment_support_img, rotate90_img], dim=0)
     augment_support_img = augment_support_img[torch.randperm(augment_support_img.size(0))]
     
+    if config.dataset.include_maddern_transform is True:
+        madder_transf_supp_img = maddern_transform(support_img, config.dataset.alpha)
+        augment_support_img = torch.cat([augment_support_img, madder_transf_supp_img], dim=0)
+
     return augment_support_img
 
 def nearest_neighbors(embedding, n_neighbors, memory_bank):
