@@ -12,7 +12,7 @@ from utils.utils import time_file_str, time_string, convert_secs2time, AverageMe
 from models.siamese import Encoder, Predictor
 from models.stn import stn_net
 from losses.norm_loss import CosLoss
-from utils.funcs import embedding_concat, mahalanobis_torch, apply_augmentations, nearest_neighbors, reshape_embedding, subsample_embedding, compute_anomaly_score
+from utils.funcs import embedding_concat, mahalanobis_torch, apply_augmentations, maddern_transform, nearest_neighbors, reshape_embedding, subsample_embedding, compute_anomaly_score
 from sklearn.metrics import roc_auc_score
 from scipy.ndimage import gaussian_filter
 from collections import OrderedDict
@@ -62,8 +62,6 @@ def main():
     PRED = Predictor().to(device)
     
     # load models
-    """TODO: Get path from config file"""
-    # CKPT_name = f'./save_checkpoints/{args.shot}/{args.obj}/{args.obj}_{args.shot}_rotation_scale_model.pt'
     CKPT_name = args.CKPT_name
     model_CKPT = torch.load(CKPT_name)
     STN.load_state_dict(model_CKPT['STN'])
@@ -87,6 +85,7 @@ def main():
     for inference_round in range(config.trainer.inferences):
         print('Round {}:'.format(inference_round))
         scores_list, test_imgs, gt_list, gt_mask_list = test(config, models, inference_round, fixed_fewshot_list, test_loader, **kwargs)
+        
         scores = np.asarray(scores_list)
         
         # Normalization
@@ -142,7 +141,7 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     augment_support_img = support_img
     
     #Apply Augmentations
-    augment_support_img = apply_augmentations(augment_support_img,support_img)
+    augment_support_img = apply_augmentations(config,augment_support_img,support_img)
    
     # torch version
     with torch.no_grad():
@@ -177,10 +176,15 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     score_map_list = []
 
     for (query_img, support_img, mask, y) in tqdm(test_loader):
-        query_imgs.extend(query_img.cpu().detach().numpy())
+        
+        print(query_img.shape)
+       
+        
         gt_list.extend(y.cpu().detach().numpy())
         mask_list.extend(mask.cpu().detach().numpy())
-        
+
+        query_imgs.extend(query_img.cpu().detach().numpy())
+
         # model prediction
         query_feat = STN(query_img.to(device))
         z1 = ENC(query_feat)
