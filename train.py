@@ -10,7 +10,12 @@ from tqdm import tqdm
 from datasets.mvtec import FSAD_Dataset_train, FSAD_Dataset_test
 from utils.utils import time_file_str, time_string, convert_secs2time, AverageMeter, print_log
 from models.siamese import Encoder, Predictor
+
 from models.stn import stn_net
+from models.hf_convnext import HF_Convnext
+from models.hf_resnet import HF_Resnet
+from models.convnext_stn import convnext_tiny
+
 from losses.norm_loss import CosLoss
 from utils.funcs import embedding_concat, mahalanobis_torch, maddern_transform
 from sklearn.metrics import roc_auc_score
@@ -25,6 +30,9 @@ warnings.filterwarnings("ignore")
 use_cuda = torch.cuda.is_available()
 device = torch.device('cuda' if use_cuda else 'cpu')
 
+import torch
+from torch.utils.tensorboard import SummaryWriter
+
 def get_parser() -> ArgumentParser:
     """Get parser.
 
@@ -37,7 +45,7 @@ def get_parser() -> ArgumentParser:
 
 def main():
     args = get_parser().parse_args()
-        
+
     """Read the arguments from Config File"""
     config = get_configurable_parameters(config_path=args.config)
 
@@ -57,6 +65,8 @@ def main():
     args.save_model_dir = config.project.save_dir + config.trainer.stn_mode + '/' + str(config.dataset.shot) + '/' + config.dataset.obj + '/'
     if not os.path.exists(args.save_model_dir):
         os.makedirs(args.save_model_dir)
+    
+    writer = SummaryWriter()
 
     """Create a LOG file to save the results """
     log = open(os.path.join(config.project.save_dir, 'log_{}_{}.txt'.format(str(config.dataset.shot),config.dataset.obj)), 'w')
@@ -64,21 +74,37 @@ def main():
     print_log(state, log)
 
     # load model and dataset
-    """TODO: Select which model you need to train on"""
-    STN = stn_net(config).to(device)
-    ENC = Encoder().to(device)
-    PRED = Predictor().to(device)
+    """Select which model you need to train on"""
+    model_names = {
+        "resnet_stn": stn_net, 
+        "resnet": HF_Resnet, 
+        "convnext": HF_Convnext, 
+        "convnext_stn": convnext_tiny, 
+        }
+    input_planes = {
+        "resnet_stn": 256, 
+        "resnet": 256, 
+        "convnext": 768, 
+        "convnext_stn": 768, 
+        }
 
+    model = model_names[config.model.backbone](config).to(device)
+    ENC = Encoder(input_planes[config.model.backbone],input_planes[config.model.backbone]).to(device)
+    PRED = Predictor(input_planes[config.model.backbone],input_planes[config.model.backbone]).to(device)
 
-    STN_optimizer = optim.SGD(STN.parameters(), lr=config.trainer.lr, momentum=config.trainer.momentum)
+    model_optimizer = optim.SGD(model.parameters(), lr=config.trainer.lr, momentum=config.trainer.momentum)
     ENC_optimizer = optim.SGD(ENC.parameters(), lr=config.trainer.lr, momentum=config.trainer.momentum)
     PRED_optimizer = optim.SGD(PRED.parameters(), lr=config.trainer.lr, momentum=config.trainer.momentum)
-    models = [STN, ENC, PRED]
-    optimizers = [STN_optimizer, ENC_optimizer, PRED_optimizer]
+    models = [model, ENC, PRED]
+    optimizers = [model_optimizer, ENC_optimizer, PRED_optimizer]
     init_lrs = [config.trainer.lr, config.trainer.lr, config.trainer.lr]
 
     print('Loading Datasets')
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
+    
+    """Create Synthetic data fol illumination"""
+    if config.dataset.ilumination_data is True:
+        pass;
     train_dataset = FSAD_Dataset_train(config.dataset.data_path, class_name=config.dataset.obj, is_train=True, resize=config.dataset.img_size, shot=config.dataset.shot, batch=config.dataset.batch_size, data_type=config.dataset.data_type )
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, **kwargs)
     test_dataset = FSAD_Dataset_test(config.dataset.data_path, class_name=config.dataset.obj, is_train=False, resize=config.dataset.img_size, shot=config.dataset.shot, data_type=config.dataset.data_type)
@@ -104,6 +130,11 @@ def main():
         if epoch <= config.trainer.epochs:
             image_auc_list = []
             pixel_auc_list = []
+            
+            train(config, models, epoch, train_loader, optimizers, log, writer)
+            train_dataset.shuffle_dataset()
+            train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, **kwargs)
+            
             for inference_round in tqdm(range(config.trainer.inferences)):
                 scores_list, test_imgs, gt_list, gt_mask_list = test(config, models, inference_round, fixed_fewshot_list,
                                                                      test_loader, **kwargs)
@@ -131,41 +162,41 @@ def main():
             mean_pixel_auc = np.mean(pixel_auc_list, axis = 0)
 
             if mean_img_auc + mean_pixel_auc > per_pixel_rocauc_old + img_roc_auc_old:
-                state = {'STN': STN.state_dict(), 'ENC': ENC.state_dict(), 'PRED':PRED.state_dict()}
+                state = {'STN': model.state_dict(), 'ENC': ENC.state_dict(), 'PRED':PRED.state_dict()}
                 torch.save(state, save_name)
                 per_pixel_rocauc_old = mean_pixel_auc
                 img_roc_auc_old = mean_img_auc
             print('Img-level AUC:',img_roc_auc_old)
             print('Pixel-level AUC:', per_pixel_rocauc_old)
-
+            
+            writer.add_scalar("Test/Accuracy",mean_img_auc, epoch-1)
             print_log(('Test Epoch(img, pixel): {} ({:.6f}, {:.6f}) best: ({:.3f}, {:.3f})'
             .format(epoch-1, mean_img_auc, mean_pixel_auc, img_roc_auc_old, per_pixel_rocauc_old)), log)
 
         epoch_time.update(time.time() - start_time)
         start_time = time.time()
-        train(config, models, epoch, train_loader, optimizers, log)
-        train_dataset.shuffle_dataset()
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, **kwargs)
         
+    
+    writer.close()
     log.close()
 
-def train(config, models, epoch, train_loader, optimizers, log):
-    STN = models[0]
+def train(config, models, epoch, train_loader, optimizers, log, writer):
+    model = models[0]
     ENC = models[1]
     PRED = models[2]
 
-    STN_optimizer = optimizers[0]
+    model_optimizer = optimizers[0]
     ENC_optimizer = optimizers[1]
     PRED_optimizer = optimizers[2]
 
-    STN.train()
+    model.train()
     ENC.train()
     PRED.train()
+    
 
     total_losses = AverageMeter()
-
     for (query_img, support_img_list, _) in tqdm(train_loader):
-        STN_optimizer.zero_grad()
+        model_optimizer.zero_grad()
         ENC_optimizer.zero_grad()
         PRED_optimizer.zero_grad()
 
@@ -176,31 +207,52 @@ def train(config, models, epoch, train_loader, optimizers, log):
 
         support_img = support_img.view(B * K, C, H, W) 
                    
-        """ Create Maddern Transform of the support image and add into them"""
+        """ Create Maddern Transform of the support image and query images"""
         if config.dataset.include_maddern_transform == True:
-            maddern_transform_query_imgs = maddern_transform(query_img, config.dataset.alpha)
-            query_img = torch.cat([maddern_transform_query_imgs, query_img], dim=0) 
-
-            maddern_transform_supp_imgs = maddern_transform(support_img, config.dataset.alpha)
-            support_img = torch.cat([maddern_transform_supp_imgs, support_img], dim=0) 
-            
-            #If bactch is 32 so 32 RGB Imgs + 32 MT Imgs = B*2
-            B = B*2          
+            query_img_mt = maddern_transform(query_img, config.dataset.alpha)
+            supp_img_mt = maddern_transform(support_img, config.dataset.alpha)                    
         
         """The shape of query_feat is [32, 256, 14, 14] [B,C,H,W]"""
-        query_feat = STN(query_img)
-
         """The shape of support_feat is [64, 256, 14, 14] because we ARE DOING B*K images"""
-        support_feat = STN(support_img)
+
+        if config.model.backbone == "resnet_stn":
+            query_feat = model(query_img)
+            support_feat = model(support_img)
+            if config.dataset.include_maddern_transform is True:
+                #calculate features of MT
+                query_feat_mt = model(query_img_mt)
+                support_feat_mt = model(supp_img_mt)
+
+        if config.model.backbone == "convnext":
+            query_feat = model(query_img).last_hidden_state
+            support_feat = model(support_img).last_hidden_state
+            if config.dataset.include_maddern_transform is True:
+                #calculate features of MT
+                query_feat_mt = model(query_img_mt).last_hidden_state
+                support_feat_mt = model(supp_img_mt).last_hidden_state
+
+
+        print("query_feat", query_feat.shape)
         print("support_feat", support_feat.shape)
 
         """Because we have k-shot images"""
         support_feat = support_feat / K
- 
+            
         _, C, H, W = support_feat.shape
         support_feat = support_feat.view(B, K, C, H, W)
         
         support_feat = torch.sum(support_feat, dim=1)
+        
+        if config.dataset.include_maddern_transform is True:
+            support_feat_mt = support_feat_mt / K
+            _, C, H, W = support_feat_mt.shape
+            support_feat_mt = support_feat_mt.view(B, K, C, H, W)
+            support_feat_mt = torch.sum(support_feat_mt, dim=1)
+            
+            """Concatinate the Query + Query MT"""
+            query_feat = torch.cat([query_feat_mt, query_feat], dim=0) 
+            """Concatinate the Supp + Supp MT"""
+            support_feat = torch.cat([support_feat_mt, support_feat], dim=0) 
 
         """The shape of z1 is [32, 256, 14, 14]"""
         z1 = ENC(query_feat)
@@ -220,12 +272,12 @@ def train(config, models, epoch, train_loader, optimizers, log):
 
         total_loss.backward()
 
-        STN_optimizer.step()
+        model_optimizer.step()
         ENC_optimizer.step()
         PRED_optimizer.step()
-
+        
+    writer.add_scalar("Train/Loss",total_losses.avg, epoch)
     print_log(('Train Epoch: {} Total_Loss: {:.6f}'.format(epoch, total_losses.avg)), log)
-
 
 def adjust_learning_rate(optimizers, init_lrs, epoch, config):
     """Decay the learning rate based on schedule"""

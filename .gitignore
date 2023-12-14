@@ -15,3 +15,4 @@ __pycache__/
 /logs_mvtec/
 /heatmaps/
 /utils/original_images
+/utils/illumination
