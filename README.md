@@ -19,7 +19,10 @@ cd Few-Shot-Anomaly-Detection-Thesis
 Create a virtual envionment and install the necessary dependencies, using `pip` and the `requirements.txt` file:
 
 ```
+conda create -n myenv python=3.9
+conda activate myenv
 pip install -r requirements.txt
+
 ```
 
 ### 3. Download Datasets
@@ -29,6 +32,7 @@ pip install -r requirements.txt
 ### 4. Download Support Sets
 - MVTec: [MVTec Support Set](https://drive.google.com/file/d/1AZcc77cmDfkWA8f8cs-j-CUuFFQ7tPoK/view)
 - MPDD: [LINK]
+
 
 ### 3. Setup Config File
 Here's a sample configuration file (`config.yaml`):

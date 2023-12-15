@@ -6,7 +6,7 @@ dataset:
   batch_size: 32
   img_size: 224
   input_channel: 3
-  supp_set: ./mpdd_supp_set/2/m_2_1.pt
+  supp_set: ./mpdd_supp_set/2/m_2_1.pt #Path to the dir of your support set
   include_maddern_transform: false
   alpha: 0.48
   ilumination_data: false

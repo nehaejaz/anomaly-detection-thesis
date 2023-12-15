@@ -13,7 +13,7 @@ transform = transforms.Compose([
 ])
 
 # set the path to the folder containing the images
-folder_path = '/home/roya/neha/RegAD/MVTec/bottle/train/good_20'
+folder_path = '/home/nejaz/Few-Shot-Anomaly-Detection-Thesis/MVTec/bottle/train/good_20'
 
 # create an empty list to store the tensors
 tensor_list = []
