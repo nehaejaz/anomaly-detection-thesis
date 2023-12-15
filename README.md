@@ -41,26 +41,26 @@ Create a configuration file (`config.yaml`) from the sample below:
 ```yaml
 dataset:
   data_type: mpdd
-  data_path: ./MPDD
+  data_path: ./MPDD #path to data set dir
   obj: metal_plate
   shot: 2
   batch_size: 32
   img_size: 224
   input_channel: 3
-  supp_set: .support_sets/MPDD/2/m_2_1.pt
+  supp_set: .support_sets/MPDD/2/m_2_1.pt #path to support set dir
   include_maddern_transform: false
   alpha: 0.48
   ilumination_data: false
 
 model:
-  backbone: convnext #[resnet_stn, resnet, convnext]
+  backbone: convnext #[resnet_stn, resnet, convnext] name of the model
   coreset_sampling_ratio: 0.01
   num_neighbors: 1
   drop_path_rate: 0.7
 
 project:
   seed: 668
-  save_dir: results/m-convnext/
+  save_dir: results/m-convnext/ #path to dir where results should be stored
 
 trainer:
   epochs: 50
