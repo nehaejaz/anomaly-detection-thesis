@@ -41,7 +41,7 @@ class FSAD_Dataset_train(Dataset):
         self.query_dir, self.support_dir = self.load_dataset_folder()
         # set transforms
         self.transform_x = transforms.Compose([
-            transforms.Resize(resize, Image.ANTIALIAS),
+            transforms.Resize(resize, Image.LANCZOS),
             transforms.ToTensor(),
             # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
@@ -197,7 +197,7 @@ class FSAD_Dataset_test(Dataset):
         self.query_dir, self.support_dir, self.query_mask = self.load_dataset_folder()
         # set transforms
         self.transform_x = transforms.Compose([
-            transforms.Resize(resize, Image.ANTIALIAS),
+            transforms.Resize(resize, Image.LANCZOS),
             transforms.ToTensor(),
             # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])

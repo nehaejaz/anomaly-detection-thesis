@@ -6,20 +6,20 @@ dataset:
   batch_size: 32
   img_size: 224
   input_channel: 3
-  supp_set: ./mpdd_supp_set/2/m_2_1.pt #Path to the dir of your support set
+  supp_set: ./support_sets/MPDD/2/m_2_1.pt #Path to the dir of your support set
   include_maddern_transform: false
   alpha: 0.48
   ilumination_data: false
 
 model:
-  backbone: convnext #[resnet_stn, resnet, convnext, convnext_stn]
+  backbone: resnet #[resnet_stn, resnet, convnext, convnext_stn]
   coreset_sampling_ratio: 0.01
   num_neighbors: 1
   drop_path_rate: 0.7
 
 project:
   seed: 668
-  save_dir: results/m-convnext/
+  save_dir: results/test-restnet/
 
 trainer:
   epochs: 50

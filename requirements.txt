@@ -104,7 +104,6 @@ seaborn==0.12.2
 setuptools==67.8.0
 sip==6.6.2
 six==1.16.0
-sklearn==0.0.post5
 stack-data==0.6.2
 sympy==1.12
 tensorboard==2.14.0
