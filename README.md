@@ -37,20 +37,25 @@ Here's a sample configuration file (`config.yaml`):
 dataset:
   data_type: mpdd
   data_path: ./MPDD
-  obj: bracket_black
+  obj: metal_plate
   shot: 2
   batch_size: 32
   img_size: 224
   input_channel: 3
-  supp_set: ./mpdd_supp_set/2/b_b_2_1.pt
+  supp_set: ./mpdd_supp_set/2/m_2_1.pt
+  include_maddern_transform: false
+  alpha: 0.48
+  ilumination_data: false
 
 model:
-  coreset_sampling_ratio: 0.05
+  backbone: convnext #[resnet_stn, resnet, convnext, convnext_stn]
+  coreset_sampling_ratio: 0.01
   num_neighbors: 1
+  drop_path_rate: 0.7
 
 project:
   seed: 668
-  save_dir: results/mpdd-bb-2/
+  save_dir: results/m-convnext/
 
 trainer:
   epochs: 50
@@ -58,6 +63,7 @@ trainer:
   lr: 0.0001
   momentum: 0.9
   stn_mode: rotation_scale
+
 ```
 
 ### 4. Training
