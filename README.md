@@ -104,8 +104,8 @@ After these steps your project structure should look like this:
   ├── models                                    # models and backbones
   │   ├── stn.py 
   │   ├── convnext_stn.py 
-  │    ├── hf_convnext.py 
-  │    ├── hf_resnet.py  
+  │   ├── hf_convnext.py 
+  │   ├── hf_resnet.py  
   │   └── siamese.py
   ├── losses                                    # losses
   │   └── norm_loss.py  
@@ -135,7 +135,9 @@ python test.py --config path/to/config.yaml --CKPT_name path/to/model_checkpoint
 ```
 ## Custome Support Sets
 You can create your own custome support set tensors by running create_tensor.py script
-
+```
+python create_tensor.py 
+```
 ## Run TensorBorad
 Open a terminal window in your root project directory run this command to see the loss and accuracy plots on tensor board
 
@@ -151,7 +153,7 @@ http://localhost:6006/
 ```
 
 ## Acknowledgement
-We borrow some codes from [SimSiam](https://github.com/facebookresearch/simsiam), [STN](https://github.com/YotYot/CalibrationNet/blob/2446a3bcb7ff4aa1e492adcde62a4b10a33635b4/models/configurable_stn_no_stereo.py) [PaDiM](https://github.com/xiahaifeng1995/PaDiM-Anomaly-Detection-Localization-master) and [RegAd](https://github.com/MediaBrain-SJTU/RegAD)
+We borrow some codes from [SimSiam](https://github.com/facebookresearch/simsiam), [STN](https://github.com/YotYot/CalibrationNet/blob/2446a3bcb7ff4aa1e492adcde62a4b10a33635b4/models/configurable_stn_no_stereo.py), [PaDiM](https://github.com/xiahaifeng1995/PaDiM-Anomaly-Detection-Localization-master) and [RegAd](https://github.com/MediaBrain-SJTU/RegAD)
 
 ## Contact
 If you have any problem with this code, please feel free to contact **nehaejaz29@gmail.com**
