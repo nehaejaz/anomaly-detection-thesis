@@ -50,7 +50,6 @@ dataset:
   supp_set: .support_sets/MPDD/2/m_2_1.pt #path to support set dir
   include_maddern_transform: false #illumination transformation
   alpha: 0.48
-  ilumination_data: false
 
 model:
   backbone: convnext #[resnet_stn, resnet, convnext] name of the model
