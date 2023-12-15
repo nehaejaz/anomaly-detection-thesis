@@ -53,7 +53,7 @@ dataset:
   ilumination_data: false
 
 model:
-  backbone: convnext #[resnet, convnext, resnet_stn, convnext_stn]
+  backbone: convnext #[resnet_stn, resnet, convnext]
   coreset_sampling_ratio: 0.01
   num_neighbors: 1
   drop_path_rate: 0.7
@@ -134,7 +134,7 @@ python test.py --config path/to/config.yaml --CKPT_name path/to/model_checkpoint
 
 ```
 ## Custome Support Sets
-You can create your own custome support set tensors by usiing create_tensor.py script
+You can create your own custome support set tensors by running create_tensor.py script
 
 ## Run TensorBorad
 Open a terminal window in your root project directory run this command to see the loss and accuracy plots on tensor board

@@ -12,7 +12,7 @@ dataset:
   ilumination_data: false
 
 model:
-  backbone: resnet #[resnet_stn, resnet, convnext, convnext_stn]
+  backbone: resnet_stn #[resnet_stn, resnet, convnext]
   coreset_sampling_ratio: 0.01
   num_neighbors: 1
   drop_path_rate: 0.7

@@ -83,7 +83,7 @@ def main():
         }
     input_planes = {
         "resnet_stn": 256, 
-        "resnet": 256, 
+        "resnet": 512, 
         "convnext": 768, 
         "convnext_stn": 768, 
         }
@@ -104,7 +104,7 @@ def main():
     
     """Create Synthetic data fol illumination"""
     if config.dataset.ilumination_data is True:
-        pass;
+        pass;#Future Work
     train_dataset = FSAD_Dataset_train(config.dataset.data_path, class_name=config.dataset.obj, is_train=True, resize=config.dataset.img_size, shot=config.dataset.shot, batch=config.dataset.batch_size, data_type=config.dataset.data_type )
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=True, **kwargs)
     test_dataset = FSAD_Dataset_test(config.dataset.data_path, class_name=config.dataset.obj, is_train=False, resize=config.dataset.img_size, shot=config.dataset.shot, data_type=config.dataset.data_type)
@@ -223,14 +223,14 @@ def train(config, models, epoch, train_loader, optimizers, log, writer):
                 query_feat_mt = model(query_img_mt)
                 support_feat_mt = model(supp_img_mt)
 
-        if config.model.backbone == "convnext":
+        if config.model.backbone == "convnext" or config.model.backbone == "resnet":
             query_feat = model(query_img).last_hidden_state
             support_feat = model(support_img).last_hidden_state
             if config.dataset.include_maddern_transform is True:
                 #calculate features of MT
                 query_feat_mt = model(query_img_mt).last_hidden_state
                 support_feat_mt = model(supp_img_mt).last_hidden_state
-
+                
 
         print("query_feat", query_feat.shape)
         print("support_feat", support_feat.shape)

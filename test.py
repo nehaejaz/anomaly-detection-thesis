@@ -71,7 +71,7 @@ def main():
     
     input_planes = {
         "resnet_stn": 256, 
-        "resnet": 256, 
+        "resnet": 512, 
         "convnext": 768, 
         "convnext_stn": 768, 
         }
@@ -154,7 +154,7 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
         train_outputs = OrderedDict([('layer1', []), ('layer2', []), ('layer3', [])])
         test_outputs = OrderedDict([('layer1', []), ('layer2', []), ('layer3', [])])
 
-    if config.model.backbone == "convnext":
+    if config.model.backbone == "convnext" or config.model.backbone == "resnet":
         train_outputs = OrderedDict([('layer1', []), ('layer2', []), ('layer3', []), ('layer4', [])])
         test_outputs = OrderedDict([('layer1', []), ('layer2', []), ('layer3', []),('layer4', [])])
 
@@ -178,8 +178,8 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
                 #calculate MT Features here
                 support_feat_mt = model(augment_support_img_mt.to(device))
 
-        '''For HF Convnext Model'''
-        if config.model.backbone == "convnext":
+        '''For HF Models'''
+        if config.model.backbone == "convnext" or config.model.backbone == "resnet" :
             output = model(augment_support_img.to(device))
             support_feat = output.last_hidden_state
             out_features = output.hidden_states
@@ -201,7 +201,7 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
         train_outputs['layer2'].append(model.stn2_output)
         train_outputs['layer3'].append(model.stn3_output)
         
-    if config.model.backbone == "convnext":
+    if config.model.backbone == "convnext" or config.model.backbone == "resnet" :
         train_outputs['layer1'].append(out_features[1])
         train_outputs['layer2'].append(out_features[2])
         train_outputs['layer3'].append(out_features[3])
@@ -217,7 +217,7 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
         for layer_name in ['layer2', 'layer3']:
             embedding_vectors = embedding_concat(embedding_vectors, train_outputs[layer_name], True)
     
-    if config.model.backbone == "convnext":
+    if config.model.backbone == "convnext" or config.model.backbone == "resnet":
         embedding_vectors = train_outputs['layer1']
         for layer_name in ['layer2', 'layer3','layer4']:
             embedding_vectors = embedding_concat(embedding_vectors, train_outputs[layer_name], True)
@@ -261,12 +261,16 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
                 query_feat = torch.cat([query_feat_mt, query_feat], dim=0) 
 
 
-        if config.model.backbone == "convnext":
+        if config.model.backbone == "convnext" or config.model.backbone == "resnet":
             output = model(query_img.to(device))
             query_feat = output.last_hidden_state
             out_features = output.hidden_states
             """TODO: Find MT Feat and Concat"""
-            
+            if config.dataset.include_maddern_transform is True:
+                #calculate features of MT
+                query_feat_mt = model(query_img_mt).last_hidden_state
+                query_feat = torch.cat([query_feat_mt, query_feat], dim=0) 
+
 
         z1 = ENC(query_feat)
         z2 = ENC(support_feat)
@@ -282,7 +286,7 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
             test_outputs['layer2'].append(model.stn2_output)
             test_outputs['layer3'].append(model.stn3_output)
         
-        if config.model.backbone == "convnext":
+        if config.model.backbone == "convnext" or config.model.backbone == "resnet":
             test_outputs['layer1'].append(out_features[1])
             test_outputs['layer2'].append(out_features[2])
             test_outputs['layer3'].append(out_features[3])
@@ -298,7 +302,7 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
             embedding_vectors = embedding_concat(embedding_vectors, test_outputs[layer_name], True)
         """The shape of embedding_vectors is [83, 448, 56, 56]""" 
     
-    if config.model.backbone == "convnext":
+    if config.model.backbone == "convnext" or config.model.backbone == "resnet":
         embedding_vectors = test_outputs['layer1']
         for layer_name in ['layer2', 'layer3', 'layer4']:
             embedding_vectors = embedding_concat(embedding_vectors, test_outputs[layer_name], True)
