@@ -7,7 +7,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
-from datasets.mvtec import FSAD_Dataset_train, FSAD_Dataset_test
+from datasets.dataset import FSAD_Dataset_train, FSAD_Dataset_test
 from utils.utils import time_file_str, time_string, convert_secs2time, AverageMeter, print_log
 from models.siamese import Encoder, Predictor
 
