@@ -5,7 +5,7 @@
 **Keywords**: Anomaly Detection, Few-Shot Learning, Computer Vision, Machine Learning
 
 ## Description
-This is my Masters thesis which is based on visual anomaly detection focused on Industries using few-shot technique at Ontario Tech university under the supervision of Dr.Faisal Qureshi.
+This repository represnts my master's thesis, conducted at Ontario Tech University under the guidance of Dr. Faisal Qureshi, delves into the realm of visual anomaly detection within industrial settings. This research is specifically centered on leveraging the innovative few-shot technique. The aim is to enhance anomaly detection capabilities in industrial environments, contributing to the advancement of  quality control systems. By applying state-of-the-art methodologies, this thesis seeks to make a significant impact in the field of visual anomaly detection, addressing challenges unique to industries and fostering advancements in the intersection of computer vision and industrial applications
 
 ## Get Started
 
@@ -149,6 +149,12 @@ Go to the URL it provides OR on windows:
 http://localhost:6006/
 
 ```
+
+## Acknowledgement
+We borrow some codes from [SimSiam](https://github.com/facebookresearch/simsiam), [STN](https://github.com/YotYot/CalibrationNet/blob/2446a3bcb7ff4aa1e492adcde62a4b10a33635b4/models/configurable_stn_no_stereo.py) [PaDiM](https://github.com/xiahaifeng1995/PaDiM-Anomaly-Detection-Localization-master) and [RegAd](https://github.com/MediaBrain-SJTU/RegAD)
+
+## Contact
+If you have any problem with this code, please feel free to contact **nehaejaz29@gmail.com**
 
 
 
