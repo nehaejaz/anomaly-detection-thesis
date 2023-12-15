@@ -1,15 +1,32 @@
-# FewShot Coreset based Anomaly Detection
+## Few-Shot-Anomaly-Detection-Thesis
+
+Author: Neha Ejaz
+Keywords: Anomaly Detection, Few-Shot Learning, Computer Vision, Machine Learning
+
 
 ## Description
-This project presents a deep learning-based category-agnostic model capable of detecting anomalies using few support samples. The results have been tested on two benchmark datasets: MVTec and MPDD.
+This is my Masters thesis which is based on visual anomaly detection focused on Industries using few-shot technique at Ontario Tech university under the supervision of Dr.Faisal Qureshi.
 
-## Installation Instructions
+## Get Started
 
-### 1. Download Datasets
+### 1. Clone the repository:
+```
+git clone https://github.com/nehaejaz/Few-Shot-Anomaly-Detection-Thesis.git
+cd Few-Shot-Anomaly-Detection-Thesis
+```
+
+### 2. Create environment
+Create a virtual envionment and install the necessary dependencies, using `pip` and the `requirements.txt` file:
+
+```
+pip install -r requirements.txt
+```
+
+### 3. Download Datasets
 - [MVTec Dataset](https://www.mvtec.com/company/research/datasets/mvtec-ad/downloads)
 - [MPDD Dataset](https://github.com/stepanje/MPDD)
 
-### 2. Download Support Sets
+### 4. Download Support Sets
 - MVTec: [MVTec Support Set](https://drive.google.com/file/d/1AZcc77cmDfkWA8f8cs-j-CUuFFQ7tPoK/view)
 - MPDD: [LINK]
 
@@ -59,3 +76,8 @@ Run the following command to test the model:
 python test.py --config path/to/config.yaml --CKPT_name path/to/model_checkpoint.pth
 
 ```
+
+## Results
+Results of few-shot anomaly detection and localization with k=2:
+
+
