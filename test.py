@@ -17,7 +17,7 @@ from models.hf_resnet import HF_Resnet
 from models.convnext_stn import convnext_tiny
 
 from losses.norm_loss import CosLoss
-from utils.funcs import embedding_concat, mahalanobis_torch, apply_augmentations, maddern_transform, nearest_neighbors, reshape_embedding, subsample_embedding, compute_anomaly_score
+from utils.funcs import embedding_concat, mahalanobis_torch, apply_augmentations, maddern_transform, nearest_neighbors, reshape_embedding, subsample_embedding, compute_anomaly_score, print_with_loader
 from sklearn.metrics import roc_auc_score
 from scipy.ndimage import gaussian_filter
 from collections import OrderedDict
@@ -83,60 +83,119 @@ def main():
     # load models
     CKPT_name = args.CKPT_name
     model_CKPT = torch.load(CKPT_name)
-    model.load_state_dict(model_CKPT['STN'])
+    STN.load_state_dict(model_CKPT['STN'])
     ENC.load_state_dict(model_CKPT['ENC'])
     PRED.load_state_dict(model_CKPT['PRED'])
     models = [STN, ENC, PRED]
 
-    print('Loading Datasets')
+    print('Loading Datasets....')
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
     test_dataset = FSAD_Dataset_test(config.dataset.data_path, class_name=config.dataset.obj, is_train=False, resize=config.dataset.img_size, shot=config.dataset.shot, data_type=config.dataset.data_type)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=False, **kwargs)
 
-    print('Loading Fixed Support Set')
+    print('Loading Fixed Support Set...')
 
     fixed_fewshot_list = torch.load(config.dataset.supp_set)
 
     print('Start Testing:')
     image_auc_list = []
     pixel_auc_list = []
+    start_time = time.time()
+
     for inference_round in range(config.trainer.inferences):
-        print('Round {}:'.format(inference_round))
+        # print('Round {}:'.format(inference_round))
         scores_list, test_imgs, gt_list, gt_mask_list = test(config, models, inference_round, fixed_fewshot_list, test_loader, **kwargs)
-        
         scores = np.asarray(scores_list)
-        
+        print_with_loader("Calculating Results....")
+
         # Normalization
         max_anomaly_score = scores.max()
         min_anomaly_score = scores.min()
         scores = (scores - min_anomaly_score) / (max_anomaly_score - min_anomaly_score)
         """The shape of scores is [83,224,224]"""
+        
+        # Set a threshold value to display high regions, this value is adjustable
+        threshold = 0.5  # This is an example value, adjust it according to your needs
+
+        index = 0
+        for img in test_imgs:
+            orig_image = img.transpose(1, 2, 0)
+            
+            # Apply the threshold to the scores array
+            thresholded_scores = np.where(scores[index] > threshold, scores[index], 0)
+
+            # Plot the original image
+            plt.imshow(orig_image)  # Assuming the original image is grayscale
+            
+            # Overlay the heatmap. Use the 'alpha' parameter for transparency.
+            plt.imshow(thresholded_scores, cmap='hot', alpha=0.5)  
+            plt.title(f"Overlayed Anomaly Map")
+            plt.axis('off')  # Hide axis
+            plt.colorbar()
+            plt.savefig(f"visuals/heatmaps/{str(inference_round)}/{index}.png") 
+            plt.close() 
+            index +=1 
 
         # calculate image-level ROC AUC score
         img_scores = scores.reshape(scores.shape[0], -1).max(axis=1)
         gt_list = np.asarray(gt_list)
         img_roc_auc = roc_auc_score(gt_list, img_scores)
         image_auc_list.append(img_roc_auc)
-        print("img_roc_auc", img_roc_auc)
-        print("image_auc_list",image_auc_list)
+        # print("img_roc_auc", img_roc_auc)
+        # print("image_auc_list",image_auc_list)
 
         # calculate per-pixel level ROCAUC
         gt_mask = np.asarray(gt_mask_list)
         gt_mask = (gt_mask > 0.5).astype(np.int_)
         per_pixel_rocauc = roc_auc_score(gt_mask.flatten(), scores.flatten())
         pixel_auc_list.append(per_pixel_rocauc)
-        print("per_pixel_rocauc", per_pixel_rocauc)
-        print("pixel_auc_list", pixel_auc_list)
+        # print("per_pixel_rocauc", per_pixel_rocauc)
+        # print("pixel_auc_list", pixel_auc_list)
+        print_with_loader("Creating Visulaization Results....")
+        
+        """save test images for classification """
+        index = 0
 
+        for img in test_imgs:
+            # Transpose from [channels, height, width] to [height, width, channels]
+            img = np.transpose(img, (1, 2, 0))
 
+            # The number you want to write
+            ground_truth_lab = gt_list[index]
+            score_num = img_scores[index]
+
+            fig, ax = plt.subplots()
+
+            # Visualize the image
+            ax.imshow(img)
+
+            # Add text at the bottom left (x=0, y=image height)
+            ax.text(0, img.shape[0], str(ground_truth_lab), color='white', fontsize=16, weight='bold', verticalalignment='bottom')
+            
+            # Add text at the bottom right (x=image width, y=image height)
+            ax.text(img.shape[1], img.shape[0], str(score_num), color='red', fontsize=16, weight='bold', verticalalignment='bottom', horizontalalignment='right')
+
+            # Visualize the image
+            plt.imshow(img)
+
+            # Save the image
+            # print("visuals/classification/"+str(inference_round)+'/'+str(index)+'.png')
+            fig.savefig("visuals/classification/"+str(inference_round)+'/'+str(index)+'.png') 
+            plt.close(fig)
+            index +=1  
 
     image_auc_list = np.array(image_auc_list)
     pixel_auc_list = np.array(pixel_auc_list)
     mean_img_auc = np.mean(image_auc_list, axis = 0)
     mean_pixel_auc = np.mean(pixel_auc_list, axis = 0)
+    end_time = time.time()
+    inference_time = end_time - start_time
     print('Img-level AUC:',mean_img_auc)
     print('Pixel-level AUC:', mean_pixel_auc)
+    print(f'Inference-Time: {inference_time:.2f} sec')
+
+    print_with_loader("Storing Results....")
 
 
 def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
@@ -160,7 +219,6 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
 
     #The shape support_img should be [2,3,224,224] [k, C, H, W]
     support_img = fixed_fewshot_list[cur_epoch]
-
     augment_support_img = support_img
     
     #Apply Augmentations
@@ -223,14 +281,14 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
             embedding_vectors = embedding_concat(embedding_vectors, train_outputs[layer_name], True)
     
     """The shape of embedding_vectors is [44, 448, 56, 56]""" 
-    print("embedding_vectors",embedding_vectors.shape)
+    # print("embedding_vectors",embedding_vectors.shape)
  
     embedding_vectors = reshape_embedding(embedding_vectors)
-    print("embedding_vectors reshaped",embedding_vectors.shape)
+    # print("embedding_vectors reshaped",embedding_vectors.shape)
 
     #Applying core-set subsampling to get the embedding
     memory_bank = subsample_embedding(embedding_vectors, coreset_sampling_ratio= config.model.coreset_sampling_ratio)
-    print("memory_bank",memory_bank.shape)
+    # print("memory_bank",memory_bank.shape)
 
     # torch version
     query_imgs = []
@@ -240,8 +298,8 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
 
     for (query_img, support_img, mask, y) in tqdm(test_loader):
         
-        print(query_img.shape)
-       
+        # print(query_img.shape)
+        # print(mask.shape)
         
         gt_list.extend(y.cpu().detach().numpy())
         mask_list.extend(mask.cpu().detach().numpy())
@@ -276,6 +334,8 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
         z2 = ENC(support_feat)
         p1 = PRED(z1)
         p2 = PRED(z2)
+        # print("z1",z1.shape,"z2",z2.shape,"p1",p1.shape,"p2",p2.shape)
+        # exit()
 
         loss = CosLoss(p1,z2, Mean=False)/2 + CosLoss(p2,z1, Mean=False)/2
         loss_reshape = F.interpolate(loss.unsqueeze(1), size=query_img.size(2), mode='bilinear',align_corners=False).squeeze(0)
@@ -312,7 +372,7 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
 
     #apply reshaping on query embeddings 
     embedding_vectors = reshape_embedding(embedding_vectors)
-    print(embedding_vectors.shape)
+    # print(embedding_vectors.shape)
 
     #apply nearest neighbor search on query embeddings 
     patch_scores, locations = nearest_neighbors(embedding=embedding_vectors, n_neighbors=config.model.num_neighbors, memory_bank=memory_bank)
@@ -321,12 +381,12 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     """The shape of patch_scores and locations is [83, 260288]"""
     patch_scores = patch_scores.reshape((batch_size, -1))
     locations = locations.reshape((batch_size, -1))
-    print("A-patch_scores", patch_scores.shape)
-    print("A-locations", locations.shape)
+    # print("A-patch_scores", patch_scores.shape)
+    # print("A-locations", locations.shape)
     
     #compute anomaly score
     anomaly_score = compute_anomaly_score(patch_scores, locations, embedding_vectors, memory_bank)
-    print("anomaly_score", anomaly_score.shape)
+    # print("anomaly_score", anomaly_score.shape)
 
     #reshape to w, h
     patch_scores = patch_scores.reshape((batch_size, 1, width, height))
@@ -343,14 +403,14 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
 
         
     """To Generate the Heat Maps. Basically the score_map
-    is the score of the patchesvwhere the anomalies are present."""   
-    print(score_map.shape) 
+    is the score of the patches where the anomalies are present."""   
+    # print(score_map.shape) 
     """The shape of score_map is (83,1, 224, 224)"""
     
     score_map = np.squeeze(score_map)
     """The shape of score_map is (83,224, 224)"""
 
-    print(score_map.shape) 
+    # print(score_map.shape) 
 
     # for i in range(score_map.shape[0]):
     #     image = score_map[i, :, :]

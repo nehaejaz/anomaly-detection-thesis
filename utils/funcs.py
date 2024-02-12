@@ -1,3 +1,5 @@
+import sys
+import time
 import numpy as np
 import torch
 from utils.utils import print_log
@@ -85,7 +87,7 @@ def maddern_transform(x,alpha):
     B,C,H,W = x.shape
     maddern = 0.5 + torch.log(x[:,1,:,:]+eps) - alpha * torch.log(x[:,2,:,:]+eps) - (1-alpha)*torch.log(x[:,0,:,:]+eps)
     x = maddern.view([B, 1, H, W])
-    print("shape",x.shape)
+    # print("shape",x.shape)
     maddern_img_3_channels = torch.cat([x]*3, dim=1)
     return maddern_img_3_channels
 
@@ -131,7 +133,7 @@ def nearest_neighbors(embedding, n_neighbors, memory_bank):
         Tensor: Patch scores.
         Tensor: Locations of the nearest neighbor(s).
     """
-    print(memory_bank.shape)
+    # print(memory_bank.shape)
     distances = torch.cdist(embedding, memory_bank, p=2.0)  # euclidean norm
     if n_neighbors == 1:
         # when n_neighbors is 1, speed up computation by using min instead of topk
@@ -197,17 +199,17 @@ def compute_anomaly_score(patch_scores, locations, embedding, memory_bank):
         # 3. Find the support samples of the nearest neighbor in the membank
         nn_sample = memory_bank[nn_index, :]  # m^* in the paper
         # indices of N_b(m^*) in the paper
-        print("inside compute_anomaly_score")
+        # print("inside compute_anomaly_score")
         _, support_samples = nearest_neighbors(nn_sample, n_neighbors=num_neighbors, memory_bank=memory_bank)
         # 4. Find the distance of the patch features to each of the support samples
         distances = torch.cdist(max_patches_features.unsqueeze(1), memory_bank[support_samples], p=2.0)
-        print("distances",distances.shape)
+        # print("distances",distances.shape)
 
         # 5. Apply softmax to find the weights
         weights = (1 - F.softmax(distances.squeeze(1), 1))[..., 0]
         # 6. Apply the weight factor to the score
         score = weights * score  # s in the paper
-        print("score",score.shape)
+        # print("score",score.shape)
         return score
 
 class EarlyStop():
@@ -260,3 +262,21 @@ class EarlyStop():
         state = {'model': model.state_dict(), 'optimizer': optimizer.state_dict()}
         torch.save(state, self.save_name)
         self.val_loss_min = val_loss
+        
+def print_with_loader(message, duration=5):
+    sys.stdout.write(message)
+    sys.stdout.flush()
+
+    loader_symbols = ['-', '\\', '|', '/']  # Simple spinning line loader
+    end_time = time.time() + duration
+
+    while time.time() < end_time:
+        for symbol in loader_symbols:
+            sys.stdout.write(f"\r{message} {symbol}")
+            time.sleep(0.1)  # Adjust this for speed of the loader
+            sys.stdout.flush()
+
+    # Clear only the loader symbols
+    sys.stdout.write("\r" + message + " " * len(loader_symbols) + "\r")
+    sys.stdout.flush()
+    print()  # Move to the next line

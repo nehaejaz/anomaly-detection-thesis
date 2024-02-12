@@ -28,6 +28,10 @@ class FSAD_Dataset_train(Dataset):
             self.CLASS_NAMES = [
                 'bracket_black', 'bracket_brown', 'bracket_white', 'connector', 'metal_plate', 'tubes'
             ]
+        elif data_type == "axiom":
+            self.CLASS_NAMES = [
+                'mc9', 'mc27'
+            ]
         else:
             raise ValueError("This datatype is not supported by us.")
         assert class_name in self.CLASS_NAMES, 'class_name: {}, should be in {}'.format(class_name, self.CLASS_NAMES)
@@ -53,7 +57,14 @@ class FSAD_Dataset_train(Dataset):
         support_img = None
 
         for i in range(len(query_list)):
-            image = Image.open(query_list[i]).convert('RGB')
+            image = Image.open(query_list[i])
+            # Check if the image is grayscale
+            if image.mode == 'L':
+                print("The image is grayscale.")
+                rgb_image = image.convert('RGB')
+            else:
+                print("The image is color.")
+                image = Image.open(query_list[i]).convert('RGB')
             image = self.transform_x(image) #image_shape torch.Size([3, 224, 224])
             image = image.unsqueeze(dim=0) #image_shape torch.Size([1, 3, 224, 224])
             if query_img is None:
@@ -62,7 +73,14 @@ class FSAD_Dataset_train(Dataset):
                 query_img = torch.cat([query_img, image],dim=0)
 
             for k in range(self.shot):
-                image = Image.open(support_list[i][k]).convert('RGB')
+                image = Image.open(support_list[i][k])
+                # Check if the image is grayscale
+                if image.mode == 'L':
+                    print("The image is grayscale.")
+                    rgb_image = image.convert('RGB')
+                else:
+                    print("The image is color.")
+                    image = Image.open(support_list[i][k]).convert('RGB')
                 image = self.transform_x(image)
                 image = image.unsqueeze(dim=0) #image_shape torch.Size([1, 3, 224, 224])
                 if support_sub_img is None:
@@ -134,8 +152,9 @@ class FSAD_Dataset_train(Dataset):
                 img_dir = os.path.join(self.dataset_path, class_name_one, phase, 'good')
                 img_types = sorted(os.listdir(img_dir))
                 for img_type in img_types:
-                    img_type_dir = os.path.join(img_dir, img_type)
-                    data_img[class_name_one].append(img_type_dir)
+                    if img_type != ".DS_Store":
+                        img_type_dir = os.path.join(img_dir, img_type)
+                        data_img[class_name_one].append(img_type_dir)
                 random.shuffle(data_img[class_name_one])
 
         query_dir, support_dir = [], []
@@ -185,6 +204,10 @@ class FSAD_Dataset_test(Dataset):
             self.CLASS_NAMES = [
                 'bracket_black', 'bracket_brown', 'bracket_white', 'connector', 'metal_plate', 'tubes'
             ]
+        elif data_type == "axiom":
+            self.CLASS_NAMES = [
+                'mc27', "mc9"
+            ]
         else:
             raise ValueError("This datatype is not supported by us.")
         assert class_name in self.CLASS_NAMES, 'class_name: {}, should be in {}'.format(class_name, self.CLASS_NAMES)
@@ -197,12 +220,12 @@ class FSAD_Dataset_test(Dataset):
         self.query_dir, self.support_dir, self.query_mask = self.load_dataset_folder()
         # set transforms
         self.transform_x = transforms.Compose([
-            transforms.Resize(resize, Image.LANCZOS),
+            transforms.Resize((resize,224), Image.LANCZOS),
             transforms.ToTensor(),
             # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         self.transform_mask = transforms.Compose(
-            [transforms.Resize(resize, Image.NEAREST),
+            [transforms.Resize((resize,224), Image.NEAREST),
              transforms.ToTensor()])
 
     def __getitem__(self, idx):
@@ -241,8 +264,9 @@ class FSAD_Dataset_test(Dataset):
             if ".DS_Store" not in os.path.basename(img_type_dir):
                 img_num = sorted(os.listdir(img_type_dir))
                 for img_one in img_num:
-                    img_dir_one = os.path.join(img_type_dir, img_one)
-                    data_img[img_type].append(img_dir_one)
+                    if img_type != ".DS_Store":
+                        img_dir_one = os.path.join(img_type_dir, img_one)
+                        data_img[img_type].append(img_dir_one)
         img_dir_train = os.path.join(self.dataset_path, self.class_name, 'train', 'good')
         img_num = sorted(os.listdir(img_dir_train))
 
@@ -269,7 +293,7 @@ class FSAD_Dataset_test(Dataset):
         assert len(query_dir) == len(support_dir) == len(
             query_mask), 'number of query_dir and support_dir should be same'
         return query_dir, support_dir, query_mask
-    
+
 class FSAD_Dataset_inference(Dataset):
     def __init__(self,
                  dataset_path='../mvtec_loco_anomaly_detection',
