@@ -7,8 +7,8 @@ from torchvision.utils import make_grid, save_image
 
 # define the transformations to be applied to each image
 transform = transforms.Compose([
-    transforms.Resize(256),
-    transforms.CenterCrop(224),
+    transforms.Resize((224,224)),
+    # transforms.CenterCrop(224),
     transforms.ToTensor(),
 ])
 
@@ -18,7 +18,6 @@ folder_path = '/home/nejaz/Few-Shot-Anomaly-Detection-Thesis/MVTec/bottle/train/
 # create an empty list to store the tensors
 tensor_list = []
 
-for i in range(10):
     
 # loop through the images in the folder
 for img_name in os.listdir(folder_path):
