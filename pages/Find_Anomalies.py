@@ -78,7 +78,7 @@ def main():
 
     #empty input folder
     # Specify the directory containing the images
-    folder_path = "./visuals/inputs/test/samples"
+    folder_path = "./visuals/inputs/"
 
     # List all files in the directory
     file_list = os.listdir(folder_path)
@@ -97,7 +97,6 @@ def main():
     #TODO: Take test images as input and then pass it to the test loader
     #Pass the uploaded image here, object name
     query_dataset = FSAD_Dataset_streamlit("./visuals", is_train=False, resize=224, shot=2)
-    # query_dataset = FSAD_Dataset_inference("./visuals", is_train=False, class_name="inputs" ,resize=224, shot=2, data_type="mpdd")
     query_loader = torch.utils.data.DataLoader(query_dataset, batch_size=1, shuffle=False, **kwargs)
 
     image_auc_list = []
@@ -105,14 +104,16 @@ def main():
     st.divider()
     
     if query_images:
-        st.write(st.session_state.loaded)
         if st.session_state.loaded:
             st.toast('Generating Results...', icon='⏳')
-            with st.spinner('Generating Results...'):
-                scores_list, test_imgs = test(models, fixed_fewshot_list, query_loader)
-            st.success('Done! 🤗')
         
+        with st.spinner('Generating Results...'):
+            scores_list, test_imgs = test(models, fixed_fewshot_list, query_loader)
+        
+        if st.session_state.loaded:
+            st.success('Done! 🤗')
             st.balloons()
+        
         scores = np.asarray(scores_list)
         # Normalization
         print(f'max={scores.max()} min={scores.min()}')
@@ -149,7 +150,6 @@ def main():
         st.divider()
         st.session_state.loaded = False
         query_images = []
-        st.write(st.session_state.loaded)
 
         # Download button for the ZIP file
         with open(zip_name, "rb") as file:
@@ -167,12 +167,11 @@ def main():
 
 def visualize_supp_set(image_tensor):
     image_tensor = image_tensor[0]
-    print(image_tensor.shape)
-
+    
     # Assuming your tensor is in range [0, 1]
     img_np = image_tensor.permute(0, 2, 3, 1).numpy()
     
-    img_num = 1
+    img_num = 1  # Initialize img_num outside the loop
 
     # Display the images
     plt.figure(figsize=(10, 5))
@@ -200,9 +199,9 @@ def visualize_supp_set(image_tensor):
             with col3:
                 st.image(buf, caption=f'Image {img_num}')
         
-        img_num = 1
+        img_num += 1  # Increment img_num inside the loop
         plt.close() 
-
+        
 def heat_maps(test_imgs, scores, threshold, obj="mvtec"):
     img_num = 1
     for index, img in enumerate(test_imgs):
@@ -244,7 +243,6 @@ def heat_maps(test_imgs, scores, threshold, obj="mvtec"):
         img_num +=1
 
 def classifi_visual(test_imgs, img_scores, obj="mvtec"):
-    """save test images for classification """
     img_num = 1
 
     for index, img in enumerate(test_imgs):
@@ -307,7 +305,7 @@ def upload_test_images():
     for uploaded_file in uploaded_files:
         img = Image.open(uploaded_file)
         # Save the image with a new filename
-        img.save(os.path.join("./visuals/inputs/test/samples", uploaded_file.name))
+        img.save(os.path.join("./visuals/inputs", uploaded_file.name))
         img_list.append(img)
         
         bytes_data = uploaded_file.read()
@@ -388,7 +386,7 @@ def test(models, fixed_fewshot_list, test_loader):
     for layer_name in ['layer2', 'layer3','layer4']:
         embedding_vectors = embedding_concat(embedding_vectors, train_outputs[layer_name], True)
     
-    """The shape of embedding_vectors is [44, 448, 56, 56]""" 
+    # """The shape of embedding_vectors is [44, 448, 56, 56]""" 
     # print("embedding_vectors",embedding_vectors.shape)
  
     embedding_vectors = reshape_embedding(embedding_vectors)
@@ -454,7 +452,7 @@ def test(models, fixed_fewshot_list, test_loader):
     patch_scores, locations = nearest_neighbors(embedding=embedding_vectors, n_neighbors=1, memory_bank=memory_bank)
     
     # reshape to batch dimension
-    """The shape of patch_scores and locations is [83, 260288]"""
+    # """The shape of patch_scores and locations is [83, 260288]"""
     patch_scores = patch_scores.reshape((batch_size, -1))
     locations = locations.reshape((batch_size, -1))
     # print("A-patch_scores", patch_scores.shape)
@@ -466,25 +464,25 @@ def test(models, fixed_fewshot_list, test_loader):
 
     #reshape to w, h
     patch_scores = patch_scores.reshape((batch_size, 1, width, height))
-    """The shape of patch_scores is [83, 1,  56, 56]"""
+    # """The shape of patch_scores is [83, 1,  56, 56]"""
     
     #Generate anomaly map
     anomaly_map_generator = AnomalyMapGenerator(input_size=224)
     anomaly_map = anomaly_map_generator(patch_scores)
-    """The shape of anomaly_map is [83, 1,  24, 24]"""
+    # """The shape of anomaly_map is [83, 1,  24, 24]"""
     
     #Put it on CPU and convert to numpy
     # score_map = anomaly_map.cpu().numpy()
     score_map = anomaly_map.cpu().detach().numpy()
 
         
-    """To Generate the Heat Maps. Basically the score_map
-    is the score of the patches where the anomalies are present."""   
+    # """To Generate the Heat Maps. Basically the score_map
+    # is the score of the patches where the anomalies are present."""   
     # print(score_map.shape) 
-    """The shape of score_map is (83,1, 224, 224)"""
+    # """The shape of score_map is (83,1, 224, 224)"""
     
     score_map = np.squeeze(score_map)
-    """The shape of score_map is (83,224, 224)"""
+    # """The shape of score_map is (83,224, 224)"""
 
     # print(score_map.shape) 
 
@@ -496,7 +494,7 @@ def test(models, fixed_fewshot_list, test_loader):
     #     plt.close()
     #     print("image", image.shape)
 
-    """The shape of score_map is (83, 224, 224)"""
+    # """The shape of score_map is (83, 224, 224)"""
     return score_map, query_imgs,   
 
 
