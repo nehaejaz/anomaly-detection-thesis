@@ -77,6 +77,8 @@ def main():
         }
     
     STN = model_names[config.model.backbone](config).to(device)
+    print(model_names[config.model.backbone])
+
     ENC = Encoder(input_planes[config.model.backbone],input_planes[config.model.backbone]).to(device)
     PRED = Predictor(input_planes[config.model.backbone],input_planes[config.model.backbone]).to(device)
     
@@ -121,10 +123,9 @@ def main():
         index = 0
         for img in test_imgs:
             orig_image = img.transpose(1, 2, 0)
-            
             # Apply the threshold to the scores array
             thresholded_scores = np.where(scores[index] > threshold, scores[index], 0)
-
+  
             # Plot the original image
             plt.imshow(orig_image)  # Assuming the original image is grayscale
             
@@ -219,10 +220,11 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
 
     #The shape support_img should be [2,3,224,224] [k, C, H, W]
     support_img = fixed_fewshot_list[cur_epoch]
+    
     augment_support_img = support_img
     
     #Apply Augmentations
-    augment_support_img = apply_augmentations(config,augment_support_img,support_img)
+    augment_support_img = apply_augmentations(augment_support_img,support_img,config)
     
     #Create Maddern Transform of support images
     if config.dataset.include_maddern_transform is True:
