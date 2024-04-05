@@ -374,3 +374,48 @@ class FSAD_Dataset_inference(Dataset):
 
         # assert len(query_dir) == len(support_dir), 'number of query_dir and support_dir should be same'
         return query_dir
+
+
+class FSAD_Dataset_streamlit(Dataset):
+    def __init__(self,
+                dataset_path,
+                is_train=True,
+                resize=256,
+                shot=2,
+                 ):
+        self.dataset_path = dataset_path
+        self.resize = resize
+        self.shot = shot
+        self.query_dir = self.load_dataset_folder()
+
+   
+        # set transforms
+        self.transform_x = transforms.Compose([
+            transforms.Resize((resize,224), Image.LANCZOS),
+            transforms.ToTensor(),
+            # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+    def __getitem__(self, idx):
+        query_one = self.query_dir[idx]
+        print(query_one)
+        query_img = Image.open(query_one).convert('RGB')
+        query_img = self.transform_x(query_img)
+        
+        if 'good' in query_one:
+            y = 0
+        else:
+            y = 1
+        
+        return query_img, y
+
+    def __len__(self):
+        return len(self.query_dir)
+    
+    def load_dataset_folder(self):  
+        query_dir_paths = []
+        query_dir = "./visuals/inputs"
+        for filename in os.listdir(query_dir):
+            full_path = os.path.join(query_dir, filename)
+            query_dir_paths.append(full_path)
+        return query_dir_paths
