@@ -96,8 +96,8 @@ def main():
 
     #TODO: Take test images as input and then pass it to the test loader
     #Pass the uploaded image here, object name
-    # query_dataset = FSAD_Dataset_streamlit(query_images, is_train=False, resize=224, shot=2)
-    query_dataset = FSAD_Dataset_inference("./visuals", is_train=False, class_name="inputs" ,resize=224, shot=2, data_type="mpdd")
+    query_dataset = FSAD_Dataset_streamlit("./visuals", is_train=False, resize=224, shot=2)
+    # query_dataset = FSAD_Dataset_inference("./visuals", is_train=False, class_name="inputs" ,resize=224, shot=2, data_type="mpdd")
     query_loader = torch.utils.data.DataLoader(query_dataset, batch_size=1, shuffle=False, **kwargs)
 
     image_auc_list = []
@@ -217,7 +217,7 @@ def heat_maps(test_imgs, scores, threshold, obj="mvtec"):
         plt.imshow(orig_image)  # Assuming the original image is grayscale
       
         # Overlay the heatmap. Use the 'alpha' parameter for transparency.
-        plt.imshow(scores[index], cmap='hot', alpha=0.5)  
+        plt.imshow(thresholded_scores, cmap='hot', alpha=0.5)  
         plt.axis('off')  # Hide axis
         plt.savefig(f"visuals/heatmaps/{img_num}.png") 
 
