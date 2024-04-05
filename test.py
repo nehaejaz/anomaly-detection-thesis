@@ -222,7 +222,7 @@ def test(config, models, cur_epoch, fixed_fewshot_list, test_loader, **kwargs):
     augment_support_img = support_img
     
     #Apply Augmentations
-    augment_support_img = apply_augmentations(config,augment_support_img,support_img)
+    augment_support_img = apply_augmentations(augment_support_img,support_img,config)
     
     #Create Maddern Transform of support images
     if config.dataset.include_maddern_transform is True:
