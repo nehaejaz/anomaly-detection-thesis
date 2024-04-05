@@ -91,7 +91,7 @@ def maddern_transform(x,alpha):
     maddern_img_3_channels = torch.cat([x]*3, dim=1)
     return maddern_img_3_channels
 
-def apply_augmentations(config, augment_support_img, support_img):
+def apply_augmentations(augment_support_img, support_img, config=None, ):
      # rotate img with small angle
     for angle in [-np.pi/4, -3 * np.pi/16, -np.pi/8, -np.pi/16, np.pi/16, np.pi/8, 3 * np.pi/16, np.pi/4]:
         rotate_img = rot_img(support_img, angle)
@@ -116,9 +116,10 @@ def apply_augmentations(config, augment_support_img, support_img):
         augment_support_img = torch.cat([augment_support_img, rotate90_img], dim=0)
     augment_support_img = augment_support_img[torch.randperm(augment_support_img.size(0))]
     
-    if config.dataset.include_maddern_transform is True:
-        madder_transf_supp_img = maddern_transform(support_img, config.dataset.alpha)
-        augment_support_img = torch.cat([augment_support_img, madder_transf_supp_img], dim=0)
+    if config is not None:
+        if config.dataset.include_maddern_transform is True:
+            madder_transf_supp_img = maddern_transform(support_img, config.dataset.alpha)
+            augment_support_img = torch.cat([augment_support_img, madder_transf_supp_img], dim=0)
 
     return augment_support_img
 
