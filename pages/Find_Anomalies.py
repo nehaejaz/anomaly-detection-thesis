@@ -164,7 +164,6 @@ def main():
                 )
         
 
-
 def visualize_supp_set(image_tensor):
     image_tensor = image_tensor[0]
     
@@ -173,10 +172,14 @@ def visualize_supp_set(image_tensor):
     
     img_num = 1  # Initialize img_num outside the loop
 
+    num_images = len(image_tensor)  # Total number of images
+    num_cols = 3  # Number of columns in the subplot
+    num_rows = (num_images + num_cols - 1) // num_cols  # Calculate the number of rows needed
+
     # Display the images
     plt.figure(figsize=(10, 5))
-    for i in range(len(image_tensor)):  # Displaying 2 images from the batch
-        plt.subplot(1, 2, i + 1)
+    for i in range(num_images):
+        plt.subplot(num_rows, num_cols, i + 1)
         plt.imshow(img_np[i])
         plt.axis('off')
         
@@ -185,7 +188,7 @@ def visualize_supp_set(image_tensor):
         plt.savefig(buf, format='png')
         buf.seek(0)
         
-        # Display images in rows of 3
+        # Display images in rows of 3 using Streamlit columns
         if img_num % 3 == 1:
             col1, col2, col3 = st.columns(3)
 
@@ -200,7 +203,7 @@ def visualize_supp_set(image_tensor):
                 st.image(buf, caption=f'Image {img_num}')
         
         img_num += 1  # Increment img_num inside the loop
-        plt.close() 
+        plt.close()
         
 def heat_maps(test_imgs, scores, threshold, obj="mvtec"):
     img_num = 1
@@ -299,7 +302,7 @@ def create_zip_from_folder(folder_path, zip_name):
                 zip_file.write(file_path, os.path.relpath(file_path, folder_path))
                        
 def upload_test_images():
-    uploaded_files = st.file_uploader("Upload test images", accept_multiple_files=True, type=["png"])
+    uploaded_files = st.file_uploader("Upload test images", accept_multiple_files=True, type=["png","jpg"])
     img_num = 1  # Initialize image number
     img_list = []
     for uploaded_file in uploaded_files:

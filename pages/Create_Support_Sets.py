@@ -26,7 +26,7 @@ tensor_list = []
 support_set_name = st.text_input('Support Set Name')
 check_supp_set_exit(support_set_name)
         
-uploaded_files = st.file_uploader(f"Choose images for {support_set_name} - Support Set", accept_multiple_files=True, type=["png"])
+uploaded_files = st.file_uploader(f"Choose images for {support_set_name} - Support Set", accept_multiple_files=True, type=["png", "jpg"])
 img_num = 1
 for uploaded_file in uploaded_files:
     bytes_data = uploaded_file.read()
