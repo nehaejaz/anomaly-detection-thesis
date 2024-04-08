@@ -1,7 +1,6 @@
 import torch
 import torchvision.transforms as transforms
 import os
-import cv2
 from PIL import Image
 from torchvision.utils import make_grid, save_image
 import streamlit as st

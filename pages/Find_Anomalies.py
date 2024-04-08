@@ -1,6 +1,5 @@
 import os
 import io
-import cv2
 import time
 from zipfile import ZipFile
 from collections import OrderedDict
