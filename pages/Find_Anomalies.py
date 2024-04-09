@@ -45,6 +45,8 @@ credentials = ClientSecretCredential(
 def main():
     
     # Initialize session state
+    if "query_images" not in st.session_state:
+        st.session_state.query_images = [] 
     if 'loaded' not in st.session_state:
         st.session_state.loaded = True
 
@@ -99,7 +101,7 @@ def main():
     fixed_fewshot_list = torch.load(supp_set, map_location="cpu")
     
     visualize_supp_set(fixed_fewshot_list)
-    query_images = upload_test_images()
+    st.session_state.query_images = upload_test_images()
 
 
     query_dataset = FSAD_Dataset_streamlit("./visuals", is_train=False, resize=224, shot=2)
@@ -109,7 +111,7 @@ def main():
     start_time = time.time()
     st.divider()
     
-    if query_images:
+    if st.session_state.query_images:
         if st.session_state.loaded:
             st.toast('Generating Results...', icon='⏳')
         
@@ -148,7 +150,7 @@ def main():
             
         st.divider()
         st.session_state.loaded = False
-        query_images = []
+        st.session_state.query_images = []
 
         # Download button for the ZIP file
         with open("results.zip", "rb") as file:
