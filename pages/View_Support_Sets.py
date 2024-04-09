@@ -18,10 +18,7 @@ credentials = ClientSecretCredential(
 
 def get_supp_set_list():
     support_set_folder = "./support_sets"
-    return os.listdir(support_set_folder)
-
-def get_supp_set_list_from_blob(container_client):
-    return container_client.list_blobs()   
+    return os.listdir(support_set_folder) 
 
 def list_supp_sets():
     support_set_folder = "./support_sets"
@@ -42,41 +39,6 @@ def list_supp_sets():
                 st.experimental_rerun()  # Rerun the script to update the UI
         count +=1
 
-def list_supp_sets_from_blob():
-    container_name = 'support-sets'
 
-    # set client to access azure storage container
-    blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
 
-    # get the container client 
-    container_client = blob_service_client.get_container_client(container=container_name)
-    supp_set_list = get_supp_set_list_from_blob(container_client)
-
-    count = 1
-    delete = False
-
-    for index, supp_set_name in enumerate(supp_set_list):
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f"{count}. {supp_set_name.name}")
-        with col2:
-            if st.button("Delete", type="primary", key=count):
-                with st.spinner('Deleting...'):
-                # st.toast('Deleted Successfully...', icon='✅')
-
-                    #delete that blob
-                    container_client.delete_blob(supp_set_name.name)
-                    
-                    # Refresh the list
-                    supp_set_list = get_supp_set_list_from_blob(container_client)
-                    delete = True
-                    st.rerun()  # Rerun the script to update the UI
-            # Display the toast message if the deletion was successful
-            if delete:
-                st.toast('Deleted Successfully...', icon='✅')
-                # Reset the deletion status
-                delete = False
-        count +=1
-
-# list_supp_sets()
-list_supp_sets_from_blob()
+list_supp_sets()

@@ -1,10 +1,10 @@
 import os
 import io
+import cv2
 import time
-import shutil
 from zipfile import ZipFile
 from collections import OrderedDict
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
@@ -12,8 +12,7 @@ import torch
 import torchvision.transforms as transforms
 from torchvision.utils import make_grid, save_image
 import torch.nn.functional as F
-from azure.identity import ClientSecretCredential
-from azure.storage.blob import BlobServiceClient
+
 from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -30,18 +29,6 @@ from io import StringIO
 
 use_cuda = torch.cuda.is_available()
 device = torch.device('cuda' if use_cuda else 'cpu')
-
-client_id = st.secrets['AZURE_CLIENT_ID']
-tenant_id = st.secrets['AZURE_TENANT_ID']
-client_secret = st.secrets['AZURE_CLIENT_SECRET']
-account_url = st.secrets["AZURE_STORAGE_URL"]
-
-# create a credential 
-credentials = ClientSecretCredential(
-    client_id = client_id, 
-    client_secret= client_secret,
-    tenant_id= tenant_id
-)
 
 def main():
     
@@ -89,34 +76,7 @@ def main():
 
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
-    #empty input folder
-    # Specify the directory containing the images
-
-    folder_path = "path/to/results"
-
-    # Delete the folder and all its contents
-    input_folder="./visuals.inputs"
-    if os.path.exists(input_folder):
-        shutil.rmtree(input_folder)
-        
-    classification_folder="./visuals/classification"
-    if os.path.exists(classification_folder):
-        shutil.rmtree(classification_folder)
-        
-    heatmaps_folder= "./visuals/heatmaps"
-    if os.path.exists(heatmaps_folder):
-        shutil.rmtree(heatmaps_folder)
-
-    # folder_path = "./visuals/inputs"
-
-    # # List all files in the directory
-    # file_list = os.listdir(folder_path)
-
-    # # Delete each file in the directory
-    # for file_name in file_list:
-    #     file_path = os.path.join(folder_path, file_name)
-    #     os.remove(file_path)
-        
+   
     #pick up the supprt set from drowndown
     supp_set = pick_supp_set()
     fixed_fewshot_list = torch.load(f'./support_sets/{supp_set}.pt')
@@ -125,7 +85,7 @@ def main():
 
     #TODO: Take test images as input and then pass it to the test loader
     #Pass the uploaded image here, object name
-    query_dataset = FSAD_Dataset_streamlit("./visuals", is_train=False, resize=224, shot=2)
+    query_dataset = FSAD_Dataset_inference("./MVTec", class_name="bottle", is_train=False, resize=224, shot=2, data_type="mpdd")
     query_loader = torch.utils.data.DataLoader(query_dataset, batch_size=1, shuffle=False, **kwargs)
 
     image_auc_list = []
@@ -133,25 +93,21 @@ def main():
     st.divider()
     
     if query_images:
+        st.write(st.session_state.loaded)
         if st.session_state.loaded:
             st.toast('Generating Results...', icon='⏳')
-        
-        with st.spinner('Generating Results...'):
-            scores_list, test_imgs = test(models, fixed_fewshot_list, query_loader)
-        
-        if st.session_state.loaded:
+            with st.spinner('Generating Results...'):
+                scores_list, test_imgs = test(models, fixed_fewshot_list, query_loader)
+                scores = np.asarray(scores_list)
             st.success('Done! 🤗')
+        
             st.balloons()
         
-        scores = np.asarray(scores_list)
-        # Normalization
-        print(f'max={scores.max()} min={scores.min()}')
         
+        # Normalization
         max_anomaly_score = scores.max()
         min_anomaly_score = scores.min()
         scores = (scores - min_anomaly_score) / (max_anomaly_score - min_anomaly_score)
-        # print(scores)
-        # exit()
         # Ensure scores has the shape (N, 224, 224)
         if len(scores.shape) == 2:  # Single image case
             scores = scores[np.newaxis, ...]  # Add a new axis at the beginning
@@ -160,7 +116,7 @@ def main():
         
         #Set a threshold value to display high regions, this value is adjustable
         threshold = 0.5  # This is an example value, adjust it according to your needs
-            
+        
         st.header("Heat Maps:")
         heat_maps(test_imgs, scores, threshold, obj="mvtec")
         
@@ -175,41 +131,39 @@ def main():
         
         # Create a ZIP file
         create_zip_from_folder(image_folder, zip_name)
-        
             
         st.divider()
         st.session_state.loaded = False
         query_images = []
+        st.write(st.session_state.loaded)
 
         # Download button for the ZIP file
-        with open("results.zip", "rb") as file:
+        with open(zip_name, "rb") as file:
             st.download_button(
                     label="Download Images",
                     data=file,
-                    file_name="results.zip",
+                    file_name=zip_name,
                     mime="application/zip",
                     help="Click to download a ZIP file containing the classification results and heatmap visualizations for each image",
                     use_container_width=True,
                     type="secondary"
                 )
-            
+        
+
 
 def visualize_supp_set(image_tensor):
     image_tensor = image_tensor[0]
-    
+    print(image_tensor.shape)
+
     # Assuming your tensor is in range [0, 1]
     img_np = image_tensor.permute(0, 2, 3, 1).numpy()
     
-    img_num = 1  # Initialize img_num outside the loop
-
-    num_images = len(image_tensor)  # Total number of images
-    num_cols = 3  # Number of columns in the subplot
-    num_rows = (num_images + num_cols - 1) // num_cols  # Calculate the number of rows needed
+    img_num = 1
 
     # Display the images
     plt.figure(figsize=(10, 5))
-    for i in range(num_images):
-        plt.subplot(num_rows, num_cols, i + 1)
+    for i in range(len(image_tensor)):  # Displaying 2 images from the batch
+        plt.subplot(1, 2, i + 1)
         plt.imshow(img_np[i])
         plt.axis('off')
         
@@ -218,7 +172,7 @@ def visualize_supp_set(image_tensor):
         plt.savefig(buf, format='png')
         buf.seek(0)
         
-        # Display images in rows of 3 using Streamlit columns
+        # Display images in rows of 3
         if img_num % 3 == 1:
             col1, col2, col3 = st.columns(3)
 
@@ -232,20 +186,11 @@ def visualize_supp_set(image_tensor):
             with col3:
                 st.image(buf, caption=f'Image {img_num}')
         
-        img_num += 1  # Increment img_num inside the loop
-        plt.close()
-        
+        img_num = 1
+        plt.close() 
+
 def heat_maps(test_imgs, scores, threshold, obj="mvtec"):
     img_num = 1
-    
-    dir_path="./visuals/heatmaps"
-    # Create the directory if it does not exist
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
-        print(f"Directory '{dir_path}' created.")
-    else:
-        print(f"Directory '{dir_path}' already exists.")
-        
     for index, img in enumerate(test_imgs):
        
         orig_image = img.transpose(1, 2, 0)
@@ -260,16 +205,13 @@ def heat_maps(test_imgs, scores, threshold, obj="mvtec"):
         # Overlay the heatmap. Use the 'alpha' parameter for transparency.
         plt.imshow(thresholded_scores, cmap='hot', alpha=0.5)  
         plt.axis('off')  # Hide axis
-        
-        
-            
         plt.savefig(f"visuals/heatmaps/{img_num}.png") 
 
         # Convert the plot to an image buffer
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         buf.seek(0)
-                
+        
         # Display images in rows of 3
         if img_num % 3 == 1:
             col1, col2, col3 = st.columns(3)
@@ -288,14 +230,9 @@ def heat_maps(test_imgs, scores, threshold, obj="mvtec"):
         img_num +=1
 
 def classifi_visual(test_imgs, img_scores, obj="mvtec"):
+    """save test images for classification """
     img_num = 1
-    dir_path="./visuals/classification"
-    # Create the directory if it does not exist
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
-        print(f"Directory '{dir_path}' created.")
-    else:
-        print(f"Directory '{dir_path}' already exists.")
+
     for index, img in enumerate(test_imgs):
         # Transpose from [channels, height, width] to [height, width, channels]
         img = np.transpose(img, (1, 2, 0))
@@ -316,6 +253,7 @@ def classifi_visual(test_imgs, img_scores, obj="mvtec"):
         ax.text(img.shape[1], img.shape[0], str(score_num), color='red', fontsize=16, weight='bold', verticalalignment='bottom', horizontalalignment='right')
 
         # Visualize the image
+        plt.imshow(img)
         plt.savefig(f"visuals/classification/{img_num}.png") 
 
         # Convert the plot to an image buffer
@@ -347,27 +285,16 @@ def create_zip_from_folder(folder_path, zip_name):
             for filename in filenames:
                 file_path = os.path.join(foldername, filename)
                 zip_file.write(file_path, os.path.relpath(file_path, folder_path))
-
+                       
 def upload_test_images():
-    dir_path="./visuals/inputs"
-    # Create the directory if it does not exist
-    if not os.path.exists(dir_path):
-        os.makedirs(dir_path)
-        print(f"Directory '{dir_path}' created.")
-    else:
-        print(f"Directory '{dir_path}' already exists.")
-   
-    uploaded_files = st.file_uploader("Upload test images", accept_multiple_files=True, type=["png","jpg"])
+    uploaded_files = st.file_uploader("Upload test images", accept_multiple_files=True, type=["png"])
     img_num = 1  # Initialize image number
     img_list = []
     for uploaded_file in uploaded_files:
-        img = Image.open(uploaded_file)
-        
-        # Save the image with a new filename
-        img.save(os.path.join("./visuals/inputs", uploaded_file.name))
-
+        img = Image.open(uploaded_file).convert('RGB')
         img_list.append(img)
         
+        bytes_data = uploaded_file.read()
 
         # Display images in rows of 3
         if img_num % 3 == 1:
@@ -416,20 +343,18 @@ def test(models, fixed_fewshot_list, test_loader):
 
     #The shape support_img should be [2,3,224,224] [k, C, H, W]
     support_img = fixed_fewshot_list[0]
-    
     augment_support_img = support_img
     
     #Apply Augmentations
     augment_support_img = apply_augmentations(augment_support_img,support_img)
-    
+  
     # torch version
     with torch.no_grad():
-        output = model(augment_support_img.to(device))
-        support_feat = output.last_hidden_state
-        out_features = output.hidden_states
+            output = model(augment_support_img.to(device))
+            support_feat = output.last_hidden_state
+            out_features = output.hidden_states
      
     support_feat = torch.mean(support_feat, dim=0, keepdim=True)
-    
         
     train_outputs['layer1'].append(out_features[1])
     train_outputs['layer2'].append(out_features[2])
@@ -439,14 +364,11 @@ def test(models, fixed_fewshot_list, test_loader):
 
     for k, v in train_outputs.items():
         train_outputs[k] = torch.cat(v, 0)
-
-    # Embedding concat
+    
     embedding_vectors = train_outputs['layer1']
     for layer_name in ['layer2', 'layer3','layer4']:
         embedding_vectors = embedding_concat(embedding_vectors, train_outputs[layer_name], True)
     
-    # """The shape of embedding_vectors is [44, 448, 56, 56]""" 
-    # print("embedding_vectors",embedding_vectors.shape)
  
     embedding_vectors = reshape_embedding(embedding_vectors)
     # print("embedding_vectors reshaped",embedding_vectors.shape)
@@ -457,19 +379,21 @@ def test(models, fixed_fewshot_list, test_loader):
 
     # torch version
     query_imgs = []
+    # gt_list = []
     mask_list = []
     score_map_list = []
 
-    for (query_img, y) in tqdm(test_loader):
+    for (query_img,y) in tqdm(test_loader):
         
-        print(query_img.shape)
+        # print(query_img.shape)
         # print(mask.shape)
         
+        # gt_list.extend(y.cpu().detach().numpy())
         # mask_list.extend(mask.cpu().detach().numpy())
 
-        query_imgs.extend(query_img.cpu().detach().numpy())
+        query_imgs.extend(query_img.cpu().detach().numpy()) 
 
-        #model prediction
+
         output = model(query_img.to(device))
         query_feat = output.last_hidden_state
         out_features = output.hidden_states
@@ -493,13 +417,10 @@ def test(models, fixed_fewshot_list, test_loader):
     for k, v in test_outputs.items():
         test_outputs[k] = torch.cat(v, 0)
 
-    #Embedding concat
-    # """The shape of embedding_vectors is [83, 448, 56, 56]""" 
-    
+    # Embedding concat
     embedding_vectors = test_outputs['layer1']
     for layer_name in ['layer2', 'layer3', 'layer4']:
         embedding_vectors = embedding_concat(embedding_vectors, test_outputs[layer_name], True)
-        # """The shape of embedding_vectors is [83, 448, 56, 56]""" 
     
     batch_size, _, width, height = embedding_vectors.shape
 
@@ -511,7 +432,6 @@ def test(models, fixed_fewshot_list, test_loader):
     patch_scores, locations = nearest_neighbors(embedding=embedding_vectors, n_neighbors=1, memory_bank=memory_bank)
     
     # reshape to batch dimension
-    # """The shape of patch_scores and locations is [83, 260288]"""
     patch_scores = patch_scores.reshape((batch_size, -1))
     locations = locations.reshape((batch_size, -1))
     # print("A-patch_scores", patch_scores.shape)
@@ -523,38 +443,18 @@ def test(models, fixed_fewshot_list, test_loader):
 
     #reshape to w, h
     patch_scores = patch_scores.reshape((batch_size, 1, width, height))
-    # """The shape of patch_scores is [83, 1,  56, 56]"""
     
     #Generate anomaly map
-    anomaly_map_generator = AnomalyMapGenerator(input_size=224)
+    anomaly_map_generator = AnomalyMapGenerator(224)
     anomaly_map = anomaly_map_generator(patch_scores)
-    # """The shape of anomaly_map is [83, 1,  24, 24]"""
     
     #Put it on CPU and convert to numpy
     # score_map = anomaly_map.cpu().numpy()
     score_map = anomaly_map.cpu().detach().numpy()
-
-        
-    # """To Generate the Heat Maps. Basically the score_map
-    # is the score of the patches where the anomalies are present."""   
-    # print(score_map.shape) 
-    # """The shape of score_map is (83,1, 224, 224)"""
     
     score_map = np.squeeze(score_map)
-    # """The shape of score_map is (83,224, 224)"""
 
-    # print(score_map.shape) 
-
-    # for i in range(score_map.shape[0]):
-    #     image = score_map[i, :, :]
-    #     plt.imshow(image, cmap='gray')
-    #     plt.colorbar()
-    #     plt.savefig("rounds/"+str(cur_epoch)+"/" + str(i)+".jpg")
-    #     plt.close()
-    #     print("image", image.shape)
-
-    # """The shape of score_map is (83, 224, 224)"""
-    return score_map, query_imgs,   
+    return score_map, query_imgs   
 
 
 

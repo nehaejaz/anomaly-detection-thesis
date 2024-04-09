@@ -413,7 +413,8 @@ class FSAD_Dataset_streamlit(Dataset):
         ])
 
     def __getitem__(self, idx):
-        query_img = self.query_dir[idx]
+        query_one = self.query_dir[idx]
+        query_img = Image.open(query_one).convert('RGB')
         query_img = self.transform_x(query_img)
         
         y = 1
@@ -422,48 +423,12 @@ class FSAD_Dataset_streamlit(Dataset):
 
     def __len__(self):
         return len(self.query_dir)
+
     
     def load_dataset_folder(self):  
-        query_images = []
-        
-        container_name = 'results'
-
-        # set client to access azure storage container
-        blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
-
-        # get the container client 
-        container_client = blob_service_client.get_container_client(container=container_name)
-        blob_list = container_client.list_blobs(name_starts_with="input/")
-        
-        for blob in blob_list:
-            blob_client = container_client.get_blob_client(blob=blob.name)
-            blob_data = blob_client.download_blob().readall()
-            try:
-                image = Image.open(io.BytesIO(blob_data))
-                query_images.append(image)
-            except UnidentifiedImageError:
-                print(f"Could not identify image file: {blob.name}")
-        return query_images
-    
-    # def load_dataset_folder(self):  
-    #     query_dir_paths = []
-        
-    #     # query_dir = "./visuals/inputs"
-    #     container_name = 'results/input'
-
-    #     # set client to access azure storage container
-    #     blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
-
-    #     # get the container client 
-    #     container_client = blob_service_client.get_container_client(container=container_name)
-    #     blob_list = container_client.list_blobs()
-        
-    #     # for blob in container_client.list_blobs():
-    #     #     blob_client = container_client.get_blob_client(blob= blob.name)
-    #     #     data = blob_client.download_blob().readall()
-    #     #     print(data.decode("utf-8"))
-    #     # for filename in os.listdir(query_dir):
-    #     #     full_path = os.path.join(query_dir, filename)
-    #     #     query_dir_paths.append(full_path)
-    #     # return query_dir_paths
-    #     return blob_list
+        query_dir_paths = []
+        query_dir="./visuals/inputs"
+        for filename in os.listdir(query_dir):
+            full_path = os.path.join(query_dir, filename)
+            query_dir_paths.append(full_path)
+        return query_dir_paths
