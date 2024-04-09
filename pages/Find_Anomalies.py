@@ -80,8 +80,8 @@ def main():
     
     # load models
     # CKPT_name = "/home/nejaz/few-shot-visual-anomaly-detection/final_model_convnext.pt"
-    CKPT_name = io.BytesIO(get_model_from_blob())
-    model_CKPT = torch.load(CKPT_name, map_location=device)
+    CKPT_name = io.BytesIO(get_pt_file_from_blob(container_name="thesis-container",blob_name="final_model_convnext.pt"))
+    model_CKPT = torch.load(CKPT_name, map_location="cpu")
     STN.load_state_dict(model_CKPT['STN'])
     ENC.load_state_dict(model_CKPT['ENC'])
     PRED.load_state_dict(model_CKPT['PRED'])
@@ -93,7 +93,11 @@ def main():
         
     #pick up the supprt set from drowndown
     supp_set = pick_supp_set()
-    fixed_fewshot_list = torch.load(f'./support_sets/{supp_set}.pt')
+    
+    #load this supp_set from blob
+    supp_set = io.BytesIO(get_pt_file_from_blob(container_name="support-sets",blob_name=supp_set))
+    fixed_fewshot_list = torch.load(supp_set, map_location="cpu")
+    
     visualize_supp_set(fixed_fewshot_list)
     query_images = upload_test_images()
 
@@ -196,8 +200,8 @@ def delete_result_blob():
         container_client.delete_blob(blob.name)
 
       
-def get_model_from_blob():
-    container_name = 'thesis-container'
+def get_pt_file_from_blob(container_name, blob_name):
+    container_name = container_name
 
     # set client to access azure storage container
     blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
@@ -206,7 +210,7 @@ def get_model_from_blob():
     container_client = blob_service_client.get_container_client(container=container_name)
 
     # download blob data 
-    blob_client = container_client.get_blob_client(blob="final_model_convnext.pt" )
+    blob_client = container_client.get_blob_client(blob=blob_name)
 
     data = blob_client.download_blob().readall()
     
@@ -410,13 +414,21 @@ def upload_test_images():
 
         img_num += 1  # Increment image number
     return img_list
+
         
 def pick_supp_set():
+    
+    container_name = 'support-sets'
+
+    # set client to access azure storage container
+    blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
+
+    # get the container client 
+    container_client = blob_service_client.get_container_client(container=container_name)
+    supp_set_list = container_client.list_blobs()
     supp_set_names_tuple = ()
-    support_set_folder = "./support_sets"
-    for supp_set_name in os.listdir(support_set_folder):
-        supp_set_name = os.path.splitext(supp_set_name)[0]
-        supp_set_names_tuple += (supp_set_name,)
+    for supp_set in supp_set_list:
+        supp_set_names_tuple += (supp_set.name,)
             
     choosen_supp_set = st.selectbox(
     'Select a support set',
