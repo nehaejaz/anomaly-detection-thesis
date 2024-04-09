@@ -1,4 +1,5 @@
 import os
+import io
 from PIL import Image
 import random
 import math
@@ -6,6 +7,21 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
+from azure.identity import ClientSecretCredential
+from azure.storage.blob import BlobServiceClient
+import streamlit as st
+
+client_id = st.secrets['AZURE_CLIENT_ID']
+tenant_id = st.secrets['AZURE_TENANT_ID']
+client_secret = st.secrets['AZURE_CLIENT_SECRET']
+account_url = st.secrets["AZURE_STORAGE_URL"]
+
+# create a credential 
+credentials = ClientSecretCredential(
+    client_id = client_id, 
+    client_secret= client_secret,
+    tenant_id= tenant_id
+)
 
 class FSAD_Dataset_train(Dataset):
     def __init__(self,
@@ -397,15 +413,10 @@ class FSAD_Dataset_streamlit(Dataset):
         ])
 
     def __getitem__(self, idx):
-        query_one = self.query_dir[idx]
-        print(query_one)
-        query_img = Image.open(query_one).convert('RGB')
+        query_img = self.query_dir[idx]
         query_img = self.transform_x(query_img)
         
-        if 'good' in query_one:
-            y = 0
-        else:
-            y = 1
+        y = 1
         
         return query_img, y
 
@@ -413,9 +424,46 @@ class FSAD_Dataset_streamlit(Dataset):
         return len(self.query_dir)
     
     def load_dataset_folder(self):  
-        query_dir_paths = []
-        query_dir = "./visuals/inputs"
-        for filename in os.listdir(query_dir):
-            full_path = os.path.join(query_dir, filename)
-            query_dir_paths.append(full_path)
-        return query_dir_paths
+        query_images = []
+        
+        container_name = 'results'
+
+        # set client to access azure storage container
+        blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
+
+        # get the container client 
+        container_client = blob_service_client.get_container_client(container=container_name)
+        blob_list = container_client.list_blobs(name_starts_with="input/")
+        
+        for blob in blob_list:
+            blob_client = container_client.get_blob_client(blob=blob.name)
+            blob_data = blob_client.download_blob().readall()
+            try:
+                image = Image.open(io.BytesIO(blob_data))
+                query_images.append(image)
+            except UnidentifiedImageError:
+                print(f"Could not identify image file: {blob.name}")
+        return query_images
+    
+    # def load_dataset_folder(self):  
+    #     query_dir_paths = []
+        
+    #     # query_dir = "./visuals/inputs"
+    #     container_name = 'results/input'
+
+    #     # set client to access azure storage container
+    #     blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
+
+    #     # get the container client 
+    #     container_client = blob_service_client.get_container_client(container=container_name)
+    #     blob_list = container_client.list_blobs()
+        
+    #     # for blob in container_client.list_blobs():
+    #     #     blob_client = container_client.get_blob_client(blob= blob.name)
+    #     #     data = blob_client.download_blob().readall()
+    #     #     print(data.decode("utf-8"))
+    #     # for filename in os.listdir(query_dir):
+    #     #     full_path = os.path.join(query_dir, filename)
+    #     #     query_dir_paths.append(full_path)
+    #     # return query_dir_paths
+    #     return blob_list

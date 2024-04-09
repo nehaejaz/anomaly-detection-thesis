@@ -27,6 +27,7 @@ def list_supp_sets():
     support_set_folder = "./support_sets"
     count = 1
     supp_set_list = get_supp_set_list()
+    st.header("Support Sets")
     for index, supp_set_name in enumerate(supp_set_list):
         col1, col2 = st.columns(2)
         with col1:

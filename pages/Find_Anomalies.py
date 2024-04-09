@@ -1,9 +1,9 @@
 import os
 import io
 import time
-from zipfile import ZipFile
+import zipfile
 from collections import OrderedDict
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
@@ -11,7 +11,8 @@ import torch
 import torchvision.transforms as transforms
 from torchvision.utils import make_grid, save_image
 import torch.nn.functional as F
-
+from azure.identity import ClientSecretCredential
+from azure.storage.blob import BlobServiceClient
 from pathlib import Path
 import sys
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -28,6 +29,18 @@ from io import StringIO
 
 use_cuda = torch.cuda.is_available()
 device = torch.device('cuda' if use_cuda else 'cpu')
+
+client_id = st.secrets['AZURE_CLIENT_ID']
+tenant_id = st.secrets['AZURE_TENANT_ID']
+client_secret = st.secrets['AZURE_CLIENT_SECRET']
+account_url = st.secrets["AZURE_STORAGE_URL"]
+
+# create a credential 
+credentials = ClientSecretCredential(
+    client_id = client_id, 
+    client_secret= client_secret,
+    tenant_id= tenant_id
+)
 
 def main():
     
@@ -66,7 +79,8 @@ def main():
     PRED = Predictor(768,768).to(device)
     
     # load models
-    CKPT_name = "/home/nejaz/few-shot-visual-anomaly-detection/final_model_convnext.pt"
+    # CKPT_name = "/home/nejaz/few-shot-visual-anomaly-detection/final_model_convnext.pt"
+    CKPT_name = io.BytesIO(get_model_from_blob())
     model_CKPT = torch.load(CKPT_name)
     STN.load_state_dict(model_CKPT['STN'])
     ENC.load_state_dict(model_CKPT['ENC'])
@@ -75,17 +89,18 @@ def main():
 
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
-    #empty input folder
-    # Specify the directory containing the images
-    folder_path = "./visuals/inputs/"
+    # #empty input folder
+    # # Specify the directory containing the images
+    # folder_path = "./visuals/inputs/"
 
-    # List all files in the directory
-    file_list = os.listdir(folder_path)
+    # # List all files in the directory
+    # file_list = os.listdir(folder_path)
 
-    # Delete each file in the directory
-    for file_name in file_list:
-        file_path = os.path.join(folder_path, file_name)
-        os.remove(file_path)
+    # # Delete each file in the directory
+    # for file_name in file_list:
+    #     file_path = os.path.join(folder_path, file_name)
+    #     os.remove(file_path)
+    delete_result_blob()
         
     #pick up the supprt set from drowndown
     supp_set = pick_supp_set()
@@ -139,29 +154,84 @@ def main():
         if st.session_state.loaded:
             st.toast('Finished Processing!', icon='✅')
 
-        # Folder containing images
-        image_folder = './visuals'
-        zip_name = 'results.zip'
+        # # Folder containing images
+        # image_folder = './visuals'
+        # zip_name = 'results.zip'
         
-        # Create a ZIP file
-        create_zip_from_folder(image_folder, zip_name)
+        # # Create a ZIP file
+        # create_zip_from_folder(image_folder, zip_name)
+        
+        download_results_from_blob()
             
         st.divider()
         st.session_state.loaded = False
         query_images = []
 
         # Download button for the ZIP file
-        with open(zip_name, "rb") as file:
+        with open("results.zip", "rb") as file:
             st.download_button(
                     label="Download Images",
                     data=file,
-                    file_name=zip_name,
+                    file_name="results.zip",
                     mime="application/zip",
                     help="Click to download a ZIP file containing the classification results and heatmap visualizations for each image",
                     use_container_width=True,
                     type="secondary"
                 )
-        
+            
+
+def download_results_from_blob():
+    container_name = 'results'
+    
+    # Create a BlobServiceClient
+    blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
+    container_client = blob_service_client.get_container_client(container_name)
+
+    # Create a zip file in memory
+    zip_buffer = io.BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        # Download all blobs from the container and add them to the zip file
+        for blob in container_client.list_blobs():
+            blob_client = container_client.get_blob_client(blob)
+            blob_data = blob_client.download_blob().readall()
+            zipf.writestr(blob.name, blob_data)
+    
+    # Seek to the beginning of the BytesIO buffer so it can be read
+    zip_buffer.seek(0)
+
+    # At this point, zip_buffer contains the zip file. You can return it from a Streamlit download button:
+    with open("results.zip", "wb") as f:
+        f.write(zip_buffer.read())
+    
+def delete_result_blob():
+    container_name = 'results'
+
+    # set client to access azure storage container
+    blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
+
+    # get the container client 
+    container_client = blob_service_client.get_container_client(container=container_name)
+    print(container_client.list_blobs())
+    for blob in container_client.list_blobs():
+        container_client.delete_blob(blob.name)
+
+      
+def get_model_from_blob():
+    container_name = 'thesis-container'
+
+    # set client to access azure storage container
+    blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
+
+    # get the container client 
+    container_client = blob_service_client.get_container_client(container=container_name)
+
+    # download blob data 
+    blob_client = container_client.get_blob_client(blob="final_model_convnext.pt" )
+
+    data = blob_client.download_blob().readall()
+    
+    return data
 
 def visualize_supp_set(image_tensor):
     image_tensor = image_tensor[0]
@@ -227,6 +297,8 @@ def heat_maps(test_imgs, scores, threshold, obj="mvtec"):
         plt.savefig(buf, format='png')
         buf.seek(0)
         
+        upload_img_to_blob(directory="heatmap", img=buf, file_name=f"{img_num}.png")
+        
         # Display images in rows of 3
         if img_num % 3 == 1:
             col1, col2, col3 = st.columns(3)
@@ -267,13 +339,16 @@ def classifi_visual(test_imgs, img_scores, obj="mvtec"):
         ax.text(img.shape[1], img.shape[0], str(score_num), color='red', fontsize=16, weight='bold', verticalalignment='bottom', horizontalalignment='right')
 
         # Visualize the image
-        plt.imshow(img)
         plt.savefig(f"visuals/classification/{img_num}.png") 
 
         # Convert the plot to an image buffer
         buf = io.BytesIO()
         plt.savefig(buf, format='png')
         buf.seek(0)
+        
+        #save the image to blob
+        upload_img_to_blob(directory="classification", img=buf, file_name=f"{img_num}.png")
+
         
         # Display images in rows of 3
         if img_num % 3 == 1:
@@ -299,15 +374,51 @@ def create_zip_from_folder(folder_path, zip_name):
             for filename in filenames:
                 file_path = os.path.join(foldername, filename)
                 zip_file.write(file_path, os.path.relpath(file_path, folder_path))
-                       
+
+def upload_img_to_blob(directory,img, file_name):                         
+    container_name = 'results'
+
+    # set client to access azure storage container
+    blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
+
+    # get the container client 
+    container_client = blob_service_client.get_container_client(container=container_name)
+
+    # Define the blob name with the 'input' virtual directory
+    blob_name = f"{directory}/{file_name}"
+    
+    container_client.upload_blob(name= blob_name, data=img)
+
+
 def upload_test_images():
+    
+    container_name = 'results'
+
+    # set client to access azure storage container
+    blob_service_client = BlobServiceClient(account_url= account_url, credential= credentials)
+
+    # get the container client 
+    container_client = blob_service_client.get_container_client(container=container_name)
+
     uploaded_files = st.file_uploader("Upload test images", accept_multiple_files=True, type=["png","jpg"])
     img_num = 1  # Initialize image number
     img_list = []
     for uploaded_file in uploaded_files:
         img = Image.open(uploaded_file)
+        
+        # Convert the PIL Image to bytes
+        with io.BytesIO() as output:
+            img.save(output, format="PNG")
+            image_bytes = output.getvalue()
+        
+        # Define the blob name with the 'input' virtual directory
+        blob_name = f"input/{uploaded_file.name}"
+        
+        container_client.upload_blob(name= blob_name, data=image_bytes)
+
         # Save the image with a new filename
         img.save(os.path.join("./visuals/inputs", uploaded_file.name))
+
         img_list.append(img)
         
         bytes_data = uploaded_file.read()
