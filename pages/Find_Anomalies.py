@@ -391,9 +391,6 @@ def upload_test_images():
         
         container_client.upload_blob(name= blob_name, data=image_bytes)
 
-        # Save the image with a new filename
-        img.save(os.path.join("./visuals/inputs", uploaded_file.name))
-
         img_list.append(img)
         
         bytes_data = uploaded_file.read()
