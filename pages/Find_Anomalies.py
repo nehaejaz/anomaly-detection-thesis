@@ -474,7 +474,7 @@ def test(models, fixed_fewshot_list, test_loader):
     # Embedding concat
     embedding_vectors = train_outputs['layer1']
     for layer_name in ['layer2', 'layer3','layer4']:
-        embedding_vectors = embedding_concat(embedding_vectors, train_outputs[layer_name], True)
+        embedding_vectors = embedding_concat(embedding_vectors, train_outputs[layer_name], use_cuda)
     
     # """The shape of embedding_vectors is [44, 448, 56, 56]""" 
     # print("embedding_vectors",embedding_vectors.shape)
