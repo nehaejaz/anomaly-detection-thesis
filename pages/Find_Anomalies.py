@@ -81,7 +81,7 @@ def main():
     # load models
     # CKPT_name = "/home/nejaz/few-shot-visual-anomaly-detection/final_model_convnext.pt"
     CKPT_name = io.BytesIO(get_model_from_blob())
-    model_CKPT = torch.load(CKPT_name)
+    model_CKPT = torch.load(CKPT_name, map_location=device)
     STN.load_state_dict(model_CKPT['STN'])
     ENC.load_state_dict(model_CKPT['ENC'])
     PRED.load_state_dict(model_CKPT['PRED'])
@@ -89,17 +89,6 @@ def main():
 
     kwargs = {'num_workers': 4, 'pin_memory': True} if use_cuda else {}
 
-    # #empty input folder
-    # # Specify the directory containing the images
-    # folder_path = "./visuals/inputs/"
-
-    # # List all files in the directory
-    # file_list = os.listdir(folder_path)
-
-    # # Delete each file in the directory
-    # for file_name in file_list:
-    #     file_path = os.path.join(folder_path, file_name)
-    #     os.remove(file_path)
     delete_result_blob()
         
     #pick up the supprt set from drowndown
@@ -108,8 +97,7 @@ def main():
     visualize_supp_set(fixed_fewshot_list)
     query_images = upload_test_images()
 
-    #TODO: Take test images as input and then pass it to the test loader
-    #Pass the uploaded image here, object name
+
     query_dataset = FSAD_Dataset_streamlit("./visuals", is_train=False, resize=224, shot=2)
     query_loader = torch.utils.data.DataLoader(query_dataset, batch_size=1, shuffle=False, **kwargs)
 
@@ -135,13 +123,11 @@ def main():
         max_anomaly_score = scores.max()
         min_anomaly_score = scores.min()
         scores = (scores - min_anomaly_score) / (max_anomaly_score - min_anomaly_score)
-        # print(scores)
-        # exit()
+      
         # Ensure scores has the shape (N, 224, 224)
         if len(scores.shape) == 2:  # Single image case
             scores = scores[np.newaxis, ...]  # Add a new axis at the beginning
         img_scores = scores.reshape(scores.shape[0], -1).max(axis=1)
-        # gt_list = np.asarray(gt_list)
         
         #Set a threshold value to display high regions, this value is adjustable
         threshold = 0.5  # This is an example value, adjust it according to your needs
@@ -153,13 +139,6 @@ def main():
         classifi_visual(test_imgs, img_scores, obj="mvtec")
         if st.session_state.loaded:
             st.toast('Finished Processing!', icon='✅')
-
-        # # Folder containing images
-        # image_folder = './visuals'
-        # zip_name = 'results.zip'
-        
-        # # Create a ZIP file
-        # create_zip_from_folder(image_folder, zip_name)
         
         download_results_from_blob()
             
@@ -366,14 +345,6 @@ def classifi_visual(test_imgs, img_scores, obj="mvtec"):
 
         plt.close(fig)
         img_num +=1 
-
-# Function to create a ZIP file from a folder of images
-def create_zip_from_folder(folder_path, zip_name):
-    with ZipFile(zip_name, 'w') as zip_file:
-        for foldername, subfolders, filenames in os.walk(folder_path):
-            for filename in filenames:
-                file_path = os.path.join(foldername, filename)
-                zip_file.write(file_path, os.path.relpath(file_path, folder_path))
 
 def upload_img_to_blob(directory,img, file_name):                         
     container_name = 'results'
