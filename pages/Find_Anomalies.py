@@ -47,6 +47,10 @@ def main():
     # Initialize session state
     if "query_images" not in st.session_state:
         st.session_state.query_images = [] 
+    if "test_imgs" not in st.session_state:
+        st.session_state.test_imgs = [] 
+    if "scores_list" not in st.session_state:
+        st.session_state.scores_list = [] 
     if 'loaded' not in st.session_state:
         st.session_state.loaded = True
 
@@ -116,13 +120,13 @@ def main():
             st.toast('Generating Results...', icon='⏳')
         
         with st.spinner('Generating Results...'):
-            scores_list, test_imgs = test(models, fixed_fewshot_list, query_loader)
+            st.session_state.scores_list, st.session_state.test_imgs = test(models, fixed_fewshot_list, query_loader)
         
         if st.session_state.loaded:
             st.success('Done! 🤗')
             st.balloons()
         
-        scores = np.asarray(scores_list)
+        scores = np.asarray(st.session_state.scores_list)
         # Normalization
         print(f'max={scores.max()} min={scores.min()}')
         
@@ -139,10 +143,10 @@ def main():
         threshold = 0.5  # This is an example value, adjust it according to your needs
             
         st.header("Heat Maps:")
-        heat_maps(test_imgs, scores, threshold, obj="mvtec")
+        heat_maps(st.session_state.test_imgs, scores, threshold, obj="mvtec")
         
         st.header("Classification Results:")
-        classifi_visual(test_imgs, img_scores, obj="mvtec")
+        classifi_visual(st.session_state.test_imgs, img_scores, obj="mvtec")
         if st.session_state.loaded:
             st.toast('Finished Processing!', icon='✅')
         
