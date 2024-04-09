@@ -273,7 +273,6 @@ def heat_maps(test_imgs, scores, threshold, obj="mvtec"):
         # Overlay the heatmap. Use the 'alpha' parameter for transparency.
         plt.imshow(thresholded_scores, cmap='hot', alpha=0.5)  
         plt.axis('off')  # Hide axis
-        plt.savefig(f"visuals/heatmaps/{img_num}.png") 
 
         # Convert the plot to an image buffer
         buf = io.BytesIO()
@@ -321,8 +320,6 @@ def classifi_visual(test_imgs, img_scores, obj="mvtec"):
         # Add text at the bottom right (x=image width, y=image height)
         ax.text(img.shape[1], img.shape[0], str(score_num), color='red', fontsize=16, weight='bold', verticalalignment='bottom', horizontalalignment='right')
 
-        # Visualize the image
-        plt.savefig(f"visuals/classification/{img_num}.png") 
 
         # Convert the plot to an image buffer
         buf = io.BytesIO()
